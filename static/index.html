@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Top Candidate Agent</title>
+  <link rel="stylesheet" href="styles.css?v=20260302a">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="app.js?v=20260302a" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="container">
+      <h1>Talent Match</h1>
+      <nav class="header-actions" aria-label="Primary">
+        <button class="btn btn-secondary nav-btn" id="navHome" type="button">Home</button>
+        <button class="btn btn-secondary nav-btn" id="navInterviews" type="button">Interviews</button>
+        <button class="btn btn-secondary nav-btn" id="navAnalytics" type="button">Analytics</button>
+        <button class="btn btn-secondary nav-btn" id="navATS" type="button">ATS</button>
+        <button class="btn btn-secondary nav-btn" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">Theme</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="view landing" id="viewHome">
+      <div class="landing-inner">
+      <div class="hero hero-split" id="homeTop">
+        <div class="hero-copy">
+          <div class="hero-badge reveal-chars" data-reveal-delay="0">AI Recruiting Copilot</div>
+          <h2 class="hero-title reveal-chars" data-reveal-delay="200">Stop chasing candidates. <br>    Start closing roles.</h2>
+          <p class="hero-subtitle reveal-chars" data-reveal-delay="400">Paste a JD, rank talent, automate outreach, schedule interviews, and review      transcripts — all in one place.</p>
+          <div class="hero-cta">
+            <button id="launchApp" class="btn btn-primary" type="button">Launch App</button>
+            <button id="seeHowItWorks" class="btn btn-secondary" type="button">See how it works</button>
+          </div>
+          <div class="hero-proof">
+            <div class="proof-item reveal-stagger" data-reveal-delay="600">
+              <div class="proof-value">1</div>
+              <div class="proof-label">Job description to start</div>
+            </div>
+            <div class="proof-item reveal-stagger" data-reveal-delay="800">
+              <div class="proof-value">2</div>
+              <div class="proof-label">Clicks to shortlist + outreach</div>
+            </div>
+            <div class="proof-item reveal-stagger" data-reveal-delay="1000">
+              <div class="proof-value">0</div>
+              <div class="proof-label">Manual follow-ups needed</div>
+            </div>
+          </div>
+        </div>
+        <div class="hero-media" aria-hidden="true">
+          <div class="hero-card">
+            <div class="hero-card-top">
+              <div class="hero-dot"></div>
+              <div class="hero-dot"></div>
+              <div class="hero-dot"></div>
+              <div class="hero-card-title">Live pipeline</div>
+            </div>
+            <div class="hero-card-body">
+              <div class="mini-row">
+                <div class="mini-pill">Role setup</div>
+                <div class="mini-pill">Ranking</div>
+                <div class="mini-pill">Outreach</div>
+                <div class="mini-pill">Scheduling</div>
+              </div>
+              <div class="mini-list">
+                <div class="mini-item">
+                  <div class="mini-name">Shortlisted candidates</div>
+                  <div class="mini-tag">Ready</div>
+                </div>
+                <div class="mini-item">
+                  <div class="mini-name">Outreach queued</div>
+                  <div class="mini-tag">Throttled</div>
+                </div>
+                <div class="mini-item">
+                  <div class="mini-name">Interviews scheduled</div>
+                  <div class="mini-tag">Sync</div>
+                </div>
+              </div>
+              <div class="mini-chart">
+                <div class="bar" style="height: 52%"></div>
+                <div class="bar" style="height: 78%"></div>
+                <div class="bar" style="height: 62%"></div>
+                <div class="bar" style="height: 90%"></div>
+                <div class="bar" style="height: 70%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeLogos">
+        <div class="logos">
+          <div class="logos-label">Designed for teams that need speed + quality</div>
+          <div class="logos-row">
+            <div class="logo-pill">Healthcare</div>
+            <div class="logo-pill">Staffing</div>
+            <div class="logo-pill">Enterprise</div>
+            <div class="logo-pill">High-volume</div>
+            <div class="logo-pill">Compliance</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeHow">
+        <div class="section-head">
+          <div>
+            <h3 class="section-title reveal-chars" data-reveal-delay="1200">How it works</h3>
+            <p class="section-subtitle reveal-chars" data-reveal-delay="1400">Paste a role → rank → outreach → schedule → review. Everything stays transparent and reversible.</p>
+          </div>
+        </div>
+
+        <div class="steps">
+          <div class="step-card">
+            <div class="step-head">
+              <div class="step-num">1</div>
+              <div>
+                <div class="step-title">Role setup</div>
+                <div class="step-desc">Paste the job description, set required skills/certs, and add must-ask questions.</div>
+              </div>
+            </div>
+            <div class="marketing-text">Your role setup becomes the source of truth for ranking and interviews — no rework.</div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-head">
+              <div class="step-num">2</div>
+              <div>
+                <div class="step-title">Rank + outreach</div>
+                <div class="step-desc">Run ranking, select candidates, and send SMS/email outreach with throttles & caps.</div>
+              </div>
+            </div>
+            <div class="marketing-text">Keep control with kill-switches and max-per-run limits — built for production.</div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-head">
+              <div class="step-num">3</div>
+              <div>
+                <div class="step-title">Scheduling</div>
+                <div class="step-desc">Collect availability, schedule interviews, and keep candidates on track with reminders.</div>
+              </div>
+            </div>
+            <div class="marketing-text">No double-booking — reschedules are handled cleanly across SMS + email.</div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-head">
+              <div class="step-num">4</div>
+              <div>
+                <div class="step-title">Review + decide</div>
+                <div class="step-desc">Open dashboards, view transcripts, and make decisions faster with clear summaries.</div>
+              </div>
+            </div>
+            <div class="marketing-text">Performance + transcript views make auditing and handoffs effortless.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeFeatures">
+        <div class="section-head">
+          <div>
+            <h3 class="section-title reveal-chars" data-reveal-delay="1600">What you get</h3>
+            <p class="section-subtitle reveal-chars" data-reveal-delay="1800">Product-grade UI, audit-friendly tracking, and an interview experience candidates actually complete.</p>
+          </div>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature">
+            <div class="feature-title">Fast ranking</div>
+            <div class="feature-text">Score candidates against your JD and required skills. Filter and page through results instantly.</div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Outreach automation</div>
+            <div class="feature-text">Send SMS/email with templates, STOP/HELP language, and idempotent tracking to avoid duplicates.</div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Interview dashboard</div>
+            <div class="feature-text">See scheduled, pending, and completed interviews with performance summaries and transcripts.</div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Blast protection</div>
+            <div class="feature-text">Caps, throttling, and kill-switch support so the system stays safe under load.</div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Analytics</div>
+            <div class="feature-text">Review completed interviews quickly and drill into transcripts when you need details.</div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Built to evolve</div>
+            <div class="feature-text">Backed by migrations and structured tracking tables for safe production updates.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeGetStarted">
+        <div class="cta-card">
+          <div>
+            <div class="cta-kicker">Ready to try it?</div>
+            <div class="cta-title reveal-chars" data-reveal-delay="2000">Launch the app and paste your role</div>
+            <div class="cta-sub reveal-chars" data-reveal-delay="2200">You can start with one JD, then expand to automated batches. Everything stays transparent and reversible.</div>
+          </div>
+          <div class="cta-actions">
+            <button id="homeGoCandidates" class="btn btn-primary" type="button">Launch App</button>
+            <button class="btn btn-secondary" id="homeGoInterviews" type="button">Open Interviews</button>
+            <button class="btn btn-secondary" id="homeGoAnalytics" type="button">Open Analytics</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeTestimonials">
+        <div class="section-head">
+          <div>
+            <h3 class="section-title reveal-chars" data-reveal-delay="2400">Teams love the speed</h3>
+            <p class="section-subtitle reveal-chars" data-reveal-delay="2600">Built for high-volume recruiting without losing signal. These are the outcomes you should expect.</p>
+          </div>
+        </div>
+        <div class="testimonial-grid">
+          <div class="testimonial">
+            <div class="testimonial-quote">“We went from spreadsheet chaos to one dashboard. The ranking + outreach flow is insanely fast.”</div>
+            <div class="testimonial-meta">
+              <div class="testimonial-name">Ops Lead</div>
+              <div class="testimonial-role">Healthcare Staffing</div>
+            </div>
+          </div>
+          <div class="testimonial">
+            <div class="testimonial-quote">“Candidates actually complete interviews when they’re scheduled and reminded properly. Huge lift.”</div>
+            <div class="testimonial-meta">
+              <div class="testimonial-name">Recruiting Manager</div>
+              <div class="testimonial-role">High-volume Team</div>
+            </div>
+          </div>
+          <div class="testimonial">
+            <div class="testimonial-quote">“The UI makes it obvious what’s happening. We can audit outreach and interview results quickly.”</div>
+            <div class="testimonial-meta">
+              <div class="testimonial-name">Compliance Partner</div>
+              <div class="testimonial-role">Enterprise</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeSecurity">
+        <div class="section-head">
+          <div>
+            <h3 class="section-title reveal-chars" data-reveal-delay="2800">Security + compliance ready</h3>
+            <p class="section-subtitle reveal-chars" data-reveal-delay="3000">Built for regulated workflows: traceable outreach, safe defaults, and clear operator controls.</p>
+          </div>
+        </div>
+        <div class="security-grid">
+          <div class="security-card">
+            <div class="security-title">Audit-friendly tracking</div>
+            <div class="security-text">Outreach and interview events are captured for review and follow-ups.</div>
+          </div>
+          <div class="security-card">
+            <div class="security-title">Blast protection</div>
+            <div class="security-text">Caps, throttles, and safe templates help prevent accidental mass sends.</div>
+          </div>
+          <div class="security-card">
+            <div class="security-title">Candidate-first experience</div>
+            <div class="security-text">Clear messaging, STOP/HELP language, and simple interview flow.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homePricing">
+        <div class="section-head">
+          <div>
+            <h3 class="section-title reveal-chars" data-reveal-delay="3200">Pricing-style options</h3>
+            <p class="section-subtitle reveal-chars" data-reveal-delay="3400">Pick a workflow that matches your volume. You can evolve without rebuilding.</p>
+          </div>
+        </div>
+        <div class="pricing-grid">
+          <div class="price-card">
+            <div class="price-top">
+              <div class="price-name">Starter</div>
+              <div class="price-value">Fast shortlist</div>
+            </div>
+            <div class="price-desc">Role setup + ranking + manual outreach.</div>
+            <div class="price-list">
+              <div class="price-item">JD-based ranking</div>
+              <div class="price-item">Filters + pagination</div>
+              <div class="price-item">Email/SMS templates</div>
+            </div>
+            <button class="btn btn-primary" id="homeGoCandidates2" type="button">Launch App</button>
+          </div>
+          <div class="price-card featured">
+            <div class="price-top">
+              <div class="price-name">Team</div>
+              <div class="price-value">Automate follow-up</div>
+            </div>
+            <div class="price-desc">Outreach + scheduling + dashboards.</div>
+            <div class="price-list">
+              <div class="price-item">Outreach tracking</div>
+              <div class="price-item">Interview dashboard</div>
+              <div class="price-item">Analytics + transcripts</div>
+            </div>
+            <button class="btn btn-primary" id="homeGoCandidates3" type="button">Launch App</button>
+          </div>
+          <div class="price-card">
+            <div class="price-top">
+              <div class="price-name">Enterprise</div>
+              <div class="price-value">Compliance-first</div>
+            </div>
+            <div class="price-desc">High volume + governance-ready workflows.</div>
+            <div class="price-list">
+              <div class="price-item">Caps + throttles</div>
+              <div class="price-item">Audit-friendly logs</div>
+              <div class="price-item">Custom templates</div>
+            </div>
+            <button class="btn btn-primary" id="homeGoCandidates4" type="button">Launch App</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-section" id="homeFaq">
+        <div class="section-head">
+          <div>
+            <h3 class="section-title reveal-chars" data-reveal-delay="3600">FAQ</h3>
+            <p class="section-subtitle reveal-chars" data-reveal-delay="3800">Quick answers about workflow, safety, and what’s automated.</p>
+          </div>
+        </div>
+        <div class="faq">
+          <button class="faq-item" type="button" aria-expanded="false">
+            <span class="faq-q">Does this send messages automatically?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a" hidden>Only when you explicitly send. The system is designed with caps/throttles and visible logs to keep things safe.</div>
+
+          <button class="faq-item" type="button" aria-expanded="false">
+            <span class="faq-q">Can I review transcripts and performance?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a" hidden>Yes. Completed interviews appear in Analytics, with a “View” action for performance and full transcript.</div>
+
+          <button class="faq-item" type="button" aria-expanded="false">
+            <span class="faq-q">What if candidates reply with off-topic questions?</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a" hidden>You can escalate off-topic replies to a recruiter and continue the scheduling flow when appropriate.</div>
+        </div>
+      </div>
+      </div>
+    </section>
+
+  <div id="atsFinalModal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Final Selected Candidate</h3>
+        <button id="closeAtsFinalModal" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="label">Candidate ID (optional)</label>
+          <input id="atsFinalCandidateId" class="input" placeholder="CEIPAL ApplicantID" />
+        </div>
+        <div class="form-group">
+          <label class="label">Email (optional)</label>
+          <input id="atsFinalEmail" class="input" placeholder="candidate@email.com" />
+        </div>
+        <div class="form-group">
+          <label class="label">Phone (optional)</label>
+          <input id="atsFinalPhone" class="input" placeholder="+1XXXXXXXXXX" />
+        </div>
+        <div class="form-group">
+          <label class="label">Notes (optional)</label>
+          <textarea id="atsFinalNotes" class="textarea" rows="4" placeholder="e.g. hired, moved to client interview, etc."></textarea>
+        </div>
+        <div id="atsFinalStatus" class="send-status mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelAtsFinalBtn" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="saveAtsFinalBtn" class="btn btn-primary" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+    <section class="panel" id="resultsPanel" hidden>
+      <div class="panel-header">
+        <h2>Ranked Candidates</h2>
+        <div class="toolbar">
+          <button id="rankBtn" class="btn" type="button">Run Ranking</button>
+          <button id="quickSendBtn" class="btn btn-primary" title="Send availability email to selected candidates immediately">Send Email</button>
+          <button id="sendMessageBtn" class="btn btn-primary" title="Send SMS to selected candidates">Send Message</button>
+        </div>
+      </div>
+
+      <div class="step-card" id="roleSetupCard">
+        <div class="step-head">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-title">Role setup</div>
+            <div class="step-desc">Paste a job description, add must-ask questions, and save it for consistent interviews.</div>
+          </div>
+        </div>
+
+        <div class="step-grid">
+          <div>
+            <label class="label" for="roleTitle">Job Title</label>
+            <input id="roleTitle" class="input" placeholder="e.g., Registered Nurse" />
+          </div>
+          <div>
+            <label class="label" for="reqSkills">Required Skills (comma separated)</label>
+            <input id="reqSkills" class="input" placeholder="e.g., Patient Care, BLS, ACLS" />
+          </div>
+          <div>
+            <label class="label" for="reqCerts">Requested Certifications (optional, comma separated)</label>
+            <input id="reqCerts" class="input" placeholder="e.g., BLS, ACLS, NRP, FHM" />
+          </div>
+          <div>
+            <label class="label" for="minExp">Minimum Experience (years)</label>
+            <input id="minExp" class="input" type="number" min="0" placeholder="e.g., 3" />
+          </div>
+        </div>
+
+        <label class="label" for="jd">Job Description</label>
+        <textarea id="jd" class="textarea" placeholder="Paste the full job description here..." rows="8"></textarea>
+        <div class="help-row">
+          <span id="jdCounter" class="muted">0 chars • 0 words</span>
+          <button id="homeSaveJobBtn" class="btn btn-secondary compact" type="button">Save Role Setup</button>
+        </div>
+
+        <div class="grid-3">
+          
+          <div class="grid-span-2">
+            <label class="label" for="homeImportantQuestions">Important Questions (one per line)</label>
+            <textarea id="homeImportantQuestions" class="textarea" rows="3" placeholder="Do you have BLS/ACLS?\nDo you hold an active license?\nAre you comfortable with night shifts?"></textarea>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="useExample" class="btn btn-secondary" type="button">Use Example</button>
+          <span id="status" class="status"></span>
+        </div>
+      </div>
+      <div class="subtoolbar">
+        <div class="search-wrap">
+          <input id="filterInput" class="input" placeholder="Filter by name, email, title, skills..." />
+          <span id="resultCount" class="result-count">0 candidates</span>
+        </div>
+        <div class="pagination-controls">
+          <div class="pagination-info">
+            <span id="resultRange">0-0</span> of <span id="totalResults">0</span>
+          </div>
+          <div class="pagination-buttons">
+            <button id="firstPage" class="btn-icon" title="First page">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="11 17 6 12 11 7"></polyline>
+                <polyline points="18 17 13 12 18 7"></polyline>
+              </svg>
+            </button>
+            <button id="prevPage" class="btn-icon" title="Previous page">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            <div class="page-input">
+              <input type="number" id="currentPage" min="1" value="1" class="page-input-field">
+              <span>of <span id="totalPages">1</span></span>
+            </div>
+            <button id="nextPage" class="btn-icon" title="Next page">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+            <button id="lastPage" class="btn-icon" title="Last page">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="13 17 18 12 13 7"></polyline>
+                <polyline points="6 17 11 12 6 7"></polyline>
+              </svg>
+            </button>
+          </div>
+          <div class="page-size">
+            <label for="pageSize" class="sr-only">Rows per page</label>
+            <select id="pageSize" class="input compact">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="topScroll" class="table-scroll-top" aria-hidden="true"><div id="topScrollInner"></div></div>
+      <!-- In your index.html -->
+<div class="table-container">
+  <table id="resultsTable" class="results-table">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="selectAll"></th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Job Title</th>
+        <th>Skills</th>
+        <th>Experience</th>
+        <th>Location</th>
+        <th>Score</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+    </section>
+
+    <section class="panel view" id="dashboardPanel" hidden>
+      <div class="panel-header">
+        <h2>Interview Dashboard</h2>
+        <div class="toolbar">
+          <button class="btn btn-secondary" id="goAnalyticsBtn" type="button">Open Analytics</button>
+        </div>
+      </div>
+      <div class="dash-head">
+        <div class="dash-kpis">
+          <div class="kpi">
+            <div class="kpi-label">Scheduled</div>
+            <div class="kpi-value" id="kpiScheduled">0</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Pending</div>
+            <div class="kpi-value" id="kpiPending">0</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Completed</div>
+            <div class="kpi-value" id="kpiCompleted">0</div>
+          </div>
+        </div>
+        <div class="dash-filters">
+          <input id="dashSearch" class="input" placeholder="Search candidate / phone..." />
+          <select id="dashStatus" class="input compact">
+            <option value="all">All statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+      </div>
+      <div class="dash-cards" id="scheduleCards"></div>
+    <div class="cards-row" id="dashboardStats">
+      <div class="card" id="statScheduled">
+        <div class="card-label">Scheduled</div>
+        <div class="card-value">0</div>
+      </div>
+      <div class="card" id="statCompleted">
+        <div class="card-label">Completed</div>
+        <div class="card-value">0</div>
+      </div>
+      <div class="card" id="statPending">
+        <div class="card-label">Pending</div>
+        <div class="card-value">0</div>
+      </div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Interview Dashboard Tabs">
+      <button type="button" class="tab-btn active" id="dashTabSchedules" aria-selected="true">Schedules</button>
+      <button type="button" class="tab-btn" id="dashTabMessages" aria-selected="false">Messages</button>
+    </div>
+
+    <div id="dashPanelSchedules" class="tab-panel">
+      <div class="dashboard-section">
+        <h3>Interview Schedules</h3>
+        <div class="table-container table-scroll">
+          <table class="results-table" id="scheduleTable">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Candidate</th>
+                <th>Phone</th>
+                <th>Timezone</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashPanelMessages" class="tab-panel" hidden>
+      <div class="dashboard-section">
+        <h3>Messages Sent</h3>
+        <div class="table-container table-scroll">
+          <table class="results-table" id="smsLogTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Direction</th>
+                <th>Phone</th>
+                <th>Message</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel view" id="atsPanel" hidden>
+      <div class="panel-header">
+        <h2>ATS</h2>
+        <div class="panel-actions">
+          <button class="btn btn-secondary" id="atsAddFinalBtn" type="button">Add Final Selected</button>
+        </div>
+      </div>
+
+    <div class="dashboard-section" id="ceipalSection">
+      <div class="section-row">
+        <h3>ATS Processing</h3>
+        <div class="section-actions">
+          <button class="btn btn-secondary" id="ceipalRefresh" type="button">Refresh</button>
+        </div>
+      </div>
+
+      <div class="ceipal-kpis">
+        <div class="kpi">
+          <div class="kpi-label">Jobs processed</div>
+          <div class="kpi-value" id="ceipalKpiJobs">0</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Candidates selected</div>
+          <div class="kpi-value" id="ceipalKpiSelected">0</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Messages sent</div>
+          <div class="kpi-value" id="ceipalKpiSent">0</div>
+        </div>
+      </div>
+
+      <div class="ceipal-layout">
+        <div class="ceipal-pane">
+          <div class="ceipal-pane-title">Recent job runs</div>
+          <div class="table-container table-scroll">
+            <table class="results-table" id="ceipalJobsTable">
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Status</th>
+                  <th>Selected</th>
+                  <th>Started</th>
+                  <th>Finished</th>
+                  <th>View</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ceipal-pane" id="ceipalDetailPane">
+          <div class="ceipal-pane-title">Selected candidates</div>
+          <div class="muted" id="ceipalDetailHint">Select a job run to see candidate outreach status.</div>
+          <div class="table-container table-scroll" id="ceipalCandidatesWrap" hidden>
+            <table class="results-table" id="ceipalCandidatesTable">
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Score</th>
+                  <th>SMS</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Final</th>
+                  <th>Transcript</th>
+                  <th>Messages</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel view" id="analyticsPanel" hidden>
+      <div class="panel-header">
+        <h2>Interview Analytics</h2>
+      </div>
+      <div class="analytics-head">
+        <div class="dash-kpis">
+          <div class="kpi">
+            <div class="kpi-label">Completed interviews</div>
+            <div class="kpi-value" id="kpiAnalCompleted">0</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Last 7 days</div>
+            <div class="kpi-value" id="kpiAnal7d">0</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Last 24h</div>
+            <div class="kpi-value" id="kpiAnal24h">0</div>
+          </div>
+        </div>
+        <div class="dash-filters">
+          <input id="analyticsSearch" class="input" placeholder="Search by phone / summary..." />
+        </div>
+      </div>
+
+      <div class="mini-insights">
+        <div class="mini-insight">
+          <div class="mini-insight-title">Recent completion trend</div>
+          <div class="spark" id="analyticsSpark"></div>
+        </div>
+        <div class="mini-insight">
+          <div class="mini-insight-title">Quick actions</div>
+          <div class="mini-actions">
+            <button class="btn btn-secondary" id="analyticsRefresh" type="button">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards-grid" id="analyticsCards"></div>
+
+    <div class="dashboard-section">
+      <h3>Completed Interviews</h3>
+      <div class="table-container table-scroll">
+        <table class="results-table" id="resultsSummaryTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Phone</th>
+              <th>Summary</th>
+              <th>View</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div id="loading" class="loading" hidden>
+    <div class="spinner"></div>
+  </div>
+
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-relevant="additions" aria-atomic="true"></div>
+
+  <div id="smsModal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Send SMS</h3>
+        <button id="closeSmsModal" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="smsRecipientInfo" class="recipient-info mb-2"></div>
+        
+        <div class="form-group">
+          <label class="label">Phone Number</label>
+          <input id="smsPhone" class="input" placeholder="+1234567890 (leave empty when sending to selected candidates)" />
+        </div>
+        
+        <div class="form-group">
+          <label class="label">Message</label>
+          <textarea id="smsMessage" class="textarea" rows="5" placeholder="Type your message here...">Hi {{name}}, we'd like to discuss the {{role}} position. When are you available for a call?
+
+Reply STOP to cancel. Reply HELP for help</textarea>
+          <div class="mt-1">
+            <small class="text-muted">Use {{name}} and {{role}} for personalization</small>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="label">Template Variables</label>
+          <div class="template-vars">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="insertAtCaret('smsMessage', '{{name}}')">Name</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="insertAtCaret('smsMessage', '{{role}}')">Role</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="insertAtCaret('smsMessage', '{{company}}')">Company</button>
+          </div>
+        </div>
+        
+        <div id="smsSendStatus" class="send-status mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelSmsBtn" class="btn btn-secondary">Cancel</button>
+        <button id="sendSmsBtn" class="btn btn-primary">
+          <span class="btn-text">Send</span>
+          <span class="spinner spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="interviewDetailModal" class="modal" hidden>
+    <div class="modal-content large">
+      <div class="modal-header">
+        <h3>Interview Detail</h3>
+        <button id="closeInterviewDetailModal" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="interviewDetailMeta" class="muted"></div>
+
+        <div class="tabs" role="tablist" aria-label="Interview Detail Tabs">
+          <button type="button" class="tab-btn" id="tabBtnPerformance" aria-selected="true">Performance</button>
+          <button type="button" class="tab-btn" id="tabBtnTranscript" aria-selected="false">Transcript</button>
+          <button type="button" class="tab-btn" id="tabBtnMessages" aria-selected="false">Messages</button>
+        </div>
+
+        <div id="tabPerformance" class="tab-panel">
+          <pre id="interviewPerformanceText" class="pre"></pre>
+        </div>
+        <div id="tabTranscript" class="tab-panel" hidden>
+          <div id="interviewTranscriptList"></div>
+        </div>
+        <div id="tabMessages" class="tab-panel" hidden>
+          <div id="interviewMessagesList"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="closeInterviewDetailModalFooter" class="btn btn-secondary" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="availabilityModal" class="modal" hidden>
+    <div class="modal-content large">
+      <div class="modal-header">
+        <h3>Recent SMS Availability</h3>
+        <button id="closeAvailabilityModal" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">Showing the most recent availability messages parsed from SMS replies.</p>
+        <div class="table-container">
+          <table class="results-table" id="availabilityTable">
+            <thead>
+              <tr>
+                <th>Candidate</th>
+                <th>Role</th>
+                <th>Phone</th>
+                <th>Availability</th>
+                <th>Message</th>
+                <th>Received At</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="emailModal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Send Email</h3>
+        <button id="closeModal" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="label">Subject</label>
+        <input id="emailSubject" class="input" placeholder="Exploring your availability for {{role}} at {{company}}" />
+
+        <label class="label">Body (HTML)</label>
+        <textarea id="emailBody" class="textarea" rows="10"><p>Hi {{name}},</p>
+<p>We came across your profile and believe you could be a great fit for our <strong>{{role}}</strong> opportunity at <strong>{{company}}</strong>.</p>
+<p>Let us know your availability for a quick chat. If you're open, reply with a few time slots or book directly on my calendar.</p>
+<p>Best regards,<br/>Talent Team</p></textarea>
+
+        <details class="smtp-details">
+          <summary>SMTP Settings (optional - leave empty for dry-run)</summary>
+          <div class="smtp-grid">
+            <input id="smtpHost" class="input" placeholder="SMTP Host" />
+            <input id="smtpPort" class="input" placeholder="SMTP Port (e.g., 587)" />
+            <input id="smtpUser" class="input" placeholder="SMTP Username" />
+            <input id="smtpPass" class="input" placeholder="SMTP Password" type="password" />
+            <input id="smtpFrom" class="input" placeholder="From Email" />
+          </div>
+        </details>
+      </div>
+      <div class="modal-footer">
+        <button id="sendEmailConfirm" class="btn btn-primary">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <div class="container">
+      <span>© Talent Match</span>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+    "sms": {
+        "first_outreach": "Hi {name},\n\nI came across your profile and noticed your experience as a {{job_title}} in {{location}}. We’re placing clinicians like you into 13-week travel contracts or local opportunities with attractive pay (base + stipend), guaranteed hours, and fast credentialing.\nWe also provide logistics support to ensure your travel is smooth.\n\nOpen to a 5-minute call to see if there’s a fit near you?\nIf yes, please share your availability (date, time, time zone).\n\nBest regards,\nJames Chandler\nHealthcare Recruiter | Radixsol",
+        "followup1": "Hi {name},\n\nJust following up — we’ve added new {{job_title}} contracts in {{location}} with premium rates, stipends, and overtime options.\nWould a quick chat make sense to see if any align with what you’re looking for?\n\nPlease share your availability (date, time, time zone).\n\nThank you,\nJames Chandler\nHealthcare Recruiter | Radixsol",
+        "followup2": "Hi {name},\n\nYour background in {{job_title}} aligns with urgent travel needs in {{hot_markets}} offering top rates, full benefits, and flexible start dates.\n\nIf open, reply YES or share your availability (date, time, time zone).\n\nBest,\nJames Chandler\nRadixsol",
+        "followup3": "Hi {name},\n\nFinal check-in — based on your profile, you’d qualify for 2–3 active travel roles nearby with strong weekly pay.\n\nIf you’d like details, reply INTERESTED or share your availability (date, time, time zone).\n\nWarm regards,\nJames Chandler\nHealthcare Recruiter | Radixsol"
+    },
+    "email": {
+        "first_outreach": {
+            "subject": "{name}, quick question about travel roles",
+            "body": "<p>Hi {name},</p>\n<p>I noticed your experience as a {{specialty}} and wanted to connect. Many clinicians are choosing 8–13 week travel contracts to increase take-home pay while maintaining flexibility.</p>\n<p>What we offer:</p>\n<ul>\n<li>Competitive weekly pay</li>\n<li>Flexible locations and shifts</li>\n<li>Fast credentialing and licensing support</li>\n<li>Dedicated recruiter support</li>\n</ul>\n<p>Would you be open to a 5–10 minute call to compare options? Please share your availability (date, time, time zone).</p>\n<p>Best regards,<br>James Chandler<br>Healthcare Recruiter | Radixsol</p>"
+        },
+        "followup1": {
+            "subject": "Roles that match your background, {name}",
+            "body": "<p>Hi {name},</p>\n<p>We currently have {{job_title}} roles that closely match your experience — offering flexible locations, strong pay, and guaranteed hours.</p>\n<p>If you share:</p>\n<ul>\n<li>Preferred location</li>\n<li>Shift preference</li>\n<li>Target weekly pay</li>\n</ul>\n<p>I can send tailored options the same day. Please share your availability (date, time, time zone).</p>\n<p>Best,<br>James Chandler</p>"
+        },
+        "followup2": {
+            "subject": "{name}, current market pay snapshot",
+            "body": "<p>Hi {name},</p>\n<p>Clinicians with similar experience are currently securing:</p>\n<ul>\n<li>Strong weekly pay packages</li>\n<li>8–13 week assignments</li>\n<li>Housing or stipend options</li>\n</ul>\n<p>Reply PAY INFO if you’d like a quick, no-obligation comparison. Or share your availability (date, time, time zone) to connect.</p>\n<p>Regards,<br>James Chandler</p>"
+        },
+        "followup3": {
+            "subject": "Last note — travel roles update",
+            "body": "<p>Hi {name},</p>\n<p>This will be my last message unless you’d like to stay connected. Demand for {{specialty}} travel roles remains strong going into 2026.</p>\n<p>If interested, reply LET’S CHAT. If not right now, reply MAYBE LATER, and I’ll reconnect when a better match opens.</p>\n<p>Warm regards,<br>James Chandler<br>Radixsol</p>"
+        }
+    }
+}

@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtualenv
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment / secrets
+.env
+credentials.json
+token.json
+gmail_token.json
+.credentials/
+
+# Local DBs
+*.db
+
+# Logs
+*.log
+logs/
+
+# Runtime artifacts
+processed_emails.json
+transcripts/
+tts/
+Performance/
