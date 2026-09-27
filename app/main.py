@@ -606,14 +606,6 @@ from app.template_loader import template_manager
 from app.messaging_service import MessagingService
 from . import messaging_service
 
-# Import email processor
-from .email_processor import (
-    EmailProcessor, 
-    AvailabilityRequest, 
-    ScheduleRequest, 
-    InterviewSlot,
-    GoogleCalendarScheduler
-)
 import google.generativeai as genai
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -1844,12 +1836,8 @@ async def chat_with_ai(
     message: str = Body(..., embed=True),
     context: str = Body("", embed=True)
 ):
-    """
-    Generate an AI response using Gemini.
-    For testing and internal use.
-    """
-    response = messaging_service.generate_ai_response(message, context)
-    return {"response": response}
+    """AI chat is disabled in spreadsheet-outreach-only mode."""
+    raise HTTPException(status_code=410, detail="AI chat is disabled; candidate replies are emailed without AI processing.")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -6585,6 +6573,9 @@ def best_get(list_name: str):
 
 @app.post("/email/send")
 def email_send(req: EmailRequest):
+    raise HTTPException(status_code=410, detail="Use spreadsheet SMS outreach; candidate email campaigns are disabled.")
+
+    # Legacy email-campaign implementation retained below but unreachable.
     from sendgrid import SendGridAPIClient
     from sendgrid.helpers.mail import Mail, HtmlContent, To, Email
     import os
@@ -6797,6 +6788,8 @@ async def handle_email_webhook(request: Request):
     Webhook endpoint to handle incoming email replies from candidates.
     Extracts availability, schedules interviews, and sends confirmation.
     """
+    raise HTTPException(status_code=410, detail="Email-based interview automation is disabled.")
+
     logger.info("\n" + "="*80)
     logger.info("NEW EMAIL WEBHOOK RECEIVED")
     logger.info("="*80)
@@ -6991,10 +6984,12 @@ async def handle_email_webhook(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/schedule-interview")
-async def schedule_interview(request: ScheduleRequest):
+async def schedule_interview(request: Request):
     """
     Schedule an interview with the candidate at the specified time.
     """
+    raise HTTPException(status_code=410, detail="Interview scheduling is disabled in spreadsheet-outreach-only mode.")
+
     try:
         # Initialize the Google Calendar scheduler
         scheduler = GoogleCalendarScheduler()
