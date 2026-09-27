@@ -1,8 +1,8 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv(override=True)
+# Load local development variables without overriding deployment environment.
+load_dotenv()
 
 # Import the messaging service components
 from .messaging import get_messaging_service, messaging_service

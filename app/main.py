@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # SQLAlchemy imports
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func, text
 from sqlalchemy.orm import Session, load_only
 
 # FastAPI imports
@@ -592,8 +592,8 @@ def get_interview_service(db: Session = Depends(get_db)) -> InterviewService:
 logger.info("\n" + "="*80)
 logger.info("INTERVIEW SCHEDULER STARTING")
 logger.info(f"Log file: {log_file}")
-from app.database import SQLALCHEMY_DATABASE_URL
-logger.info(f"Database URL: {SQLALCHEMY_DATABASE_URL}")
+from app.database import DATABASE_BACKEND
+logger.info("Database backend configured: %s", DATABASE_BACKEND)
 logger.info("="*80 + "\n")
 
 from fastapi.staticfiles import StaticFiles
@@ -3814,7 +3814,7 @@ def health_ceipal():
     try:
         db = SessionLocal()
         try:
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             status_out["db"] = {"ok": True}
         finally:
             db.close()

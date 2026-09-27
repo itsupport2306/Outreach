@@ -53,14 +53,15 @@ The app reads configuration from environment variables (supports a local `.env`)
 
 ### Required (most setups)
 
-- `GEMINI_API_KEY` - Gemini API key
+- `GOOGLE_API_KEY` - currently required by legacy application initialization; the spreadsheet SMS reply webhook does not send candidate replies to Gemini
 - `DATABASE_URL`
   - SQLite example: `sqlite:///./interview_scheduler.db`
   - MySQL example: `mysql+mysqldb://USER:PASSWORD@HOST:3306/DBNAME`
+  - PostgreSQL example: `postgresql://USER:PASSWORD@HOST:5432/DBNAME` (normalized to psycopg 3 by `app.database`)
 - **Twilio**
   - `TWILIO_ACCOUNT_SID`
   - `TWILIO_AUTH_TOKEN`
-  - `TWILIO_FROM_NUMBER` (or messaging service SID depending on your setup)
+  - `TWILIO_PHONE_NUMBER`
 - `BASE_URL` - public URL for webhooks (use ngrok in dev)
 
 ### CEIPAL
@@ -71,8 +72,9 @@ The app reads configuration from environment variables (supports a local `.env`)
 
 ### Optional
 
-- `OUTREACH_ENABLED` - set to `1` to send live SMS; `0` to disable sending
-- `DB_AUTO_CREATE_TABLES` - set to `1` if you want to auto-create tables (dev only)
+- `SHEET_OUTREACH_ENABLED` - set to `1` to enable spreadsheet SMS sends
+- `OUTREACH_ENABLED` - legacy candidate pipeline switch; keep `0` in spreadsheet-only mode
+- `DB_AUTO_CREATE_TABLES` - set to `1` to create tables when deploying a new, empty database
 - Google Calendar OAuth token/credentials under `.credentials/` (see app logs for exact path)
 
 ## Database Setup
@@ -91,7 +93,18 @@ Set:
 DB_AUTO_CREATE_TABLES=1
 ```
 
-Then run the app once.
+Then run the app once. For production schema evolution, use Alembic migrations.
+
+### Render PostgreSQL
+
+Create a Render PostgreSQL database in the same region as the web service and set `DATABASE_URL` to its **Internal Database URL**. The app converts Render's `postgresql://` URL to `postgresql+psycopg://`; `psycopg[binary]` is included in `requirements.txt`. Set `DB_AUTO_CREATE_TABLES=1` for the initial empty database so the app creates its tables. The database is needed to retain outreach history, avoid resending to previously contacted numbers, and associate candidate replies with their outreach record.
+
+For a Render Web Service, use:
+
+```text
+Build: pip install -r requirements.txt
+Start: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
 
 ## Run the API (Local)
 
@@ -122,7 +135,7 @@ Then configure Twilio webhook(s) to point to the appropriate endpoints in `app/m
 
 ## Spreadsheet SMS outreach
 
-Open the candidate workflow, choose **Outreach from spreadsheet**, and upload an `.xlsx` workbook with `First Name`, `Last Name`, and `Phone` columns. The app previews the message and recipient count before sending; rows with missing names, invalid phone numbers, or duplicate phone numbers are skipped. Sending requires `OUTREACH_ENABLED=1`.
+Open the candidate workflow, choose **Outreach from spreadsheet**, and upload an `.xlsx` workbook with candidate name and phone columns. The app previews the message and recipient count before sending; rows with missing names, invalid phone numbers, duplicate phone numbers, or numbers previously contacted by this workflow are skipped. Sending requires `SHEET_OUTREACH_ENABLED=1`.
 
 The Twilio inbound messaging webhook must point to `/api/sms/webhook`. Replies to spreadsheet campaigns are emailed to `OFFTOPIC_FORWARD_EMAIL`; the email includes candidate name and phone, the original outreach, the reply text, and a UTC timestamp. Configure `OFFTOPIC_FORWARD_EMAIL`, `SENDGRID_API_KEY`, and `SENDGRID_FROM_EMAIL`. Replies also continue through the existing candidate reply flow.
 
@@ -144,14 +157,14 @@ There is also a runtime reload endpoint:
   - `logs/`
   - `.venv/`
   - any real CEIPAL exported reports (`ceipal_*_report.json`)
-- Use a production DB (MySQL recommended).
+- Use persistent production storage (Render PostgreSQL is supported).
 - Put secrets in your deployment provider’s secret manager / env config.
 
 ## Security Notes
 
 This system can send **real SMS/calls**.
 
-- Keep `OUTREACH_ENABLED=0` in non-prod environments unless you are explicitly testing.
+- Keep `SHEET_OUTREACH_ENABLED=0` outside of an intentional outreach campaign.
 - Restrict/secure any admin or template reload endpoints.
 
 ---

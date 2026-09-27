@@ -17,11 +17,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use DATABASE_URL from environment (recommended for prod)
-database_url = os.getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
-
 # Signal to application code that we're running under Alembic (avoid side effects)
 os.environ["ALEMBIC_RUNNING"] = "1"
 
@@ -36,10 +31,10 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.database import Base  # noqa: E402
 from app.database import SQLALCHEMY_DATABASE_URL  # noqa: E402
 
-# Ensure sqlalchemy.url is set even if DATABASE_URL is not present
-if not (config.get_main_option("sqlalchemy.url") or "").strip():
-    if (SQLALCHEMY_DATABASE_URL or "").strip():
-        config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
+# Prefer the normalized application URL so Render's postgresql:// URL uses
+# psycopg 3 for both the web service and Alembic commands.
+if (SQLALCHEMY_DATABASE_URL or "").strip():
+    config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL.replace("%", "%%"))
 import app.models  # noqa: F401,E402
 import app.main  # noqa: F401,E402
 

@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
@@ -7,14 +8,32 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Database URL - use environment variable or default to SQLite (for local dev)
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./interview_scheduler.db")
+def normalize_database_url(database_url: str) -> str:
+    """Normalize provider PostgreSQL URLs for SQLAlchemy + psycopg 3."""
+    database_url = (database_url or "").strip()
+    if database_url.startswith("postgres://"):
+        return "postgresql+psycopg://" + database_url[len("postgres://"):]
+    if database_url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + database_url[len("postgresql://"):]
+    return database_url
+
+
+# Use SQLite only as the local-development fallback. Render sets DATABASE_URL
+# to its PostgreSQL internal URL, which is normalized to the psycopg 3 driver.
+SQLALCHEMY_DATABASE_URL = normalize_database_url(
+    os.getenv("DATABASE_URL") or "sqlite:///./interview_scheduler.db"
+)
+
+DATABASE_BACKEND = make_url(SQLALCHEMY_DATABASE_URL).get_backend_name()
 
 # Create SQLAlchemy engine
 # Use SQLite-specific connect_args only when using SQLite
 engine_kwargs = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Render Postgres may close idle connections during deploys/maintenance.
+    engine_kwargs["pool_pre_ping"] = True
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 

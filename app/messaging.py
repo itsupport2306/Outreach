@@ -51,7 +51,8 @@ class MessagingService:
         """
         
         # Load environment variables
-        load_dotenv(override=True)
+        # Render/system environment variables take precedence over local .env.
+        load_dotenv()
         
         # Initialize Twilio client
         self.twilio_account_sid = os.getenv('TWILIO_ACCOUNT_SID')
