@@ -577,7 +577,7 @@ class MessagingService:
             ) + r')\b'
             
             # First try to find timezone at the end of the string (most common case)
-            tz_match = re.search(f"({tz_pattern})\s*$", time_expr, re.IGNORECASE)
+            tz_match = re.search(fr"({tz_pattern})\s*$", time_expr, re.IGNORECASE)
             if not tz_match:
                 # If not at the end, try to find it anywhere in the string
                 tz_match = re.search(tz_pattern, time_expr, re.IGNORECASE)
@@ -633,7 +633,7 @@ class MessagingService:
                     detected_tz = pytz.timezone(tz_mapping[tz_abbr])
                     # Remove timezone from text to avoid confusion in parsing
                     if tz_match and hasattr(tz_match, 'group'):
-                        time_expr = re.sub(f"{re.escape(tz_match.group(1))}\s*$", '', time_expr, flags=re.IGNORECASE).strip()
+                        time_expr = re.sub(fr"{re.escape(tz_match.group(1))}\s*$", '', time_expr, flags=re.IGNORECASE).strip()
                         if time_expr == time_expr_original:  # If no change, try removing from anywhere
                             time_expr = re.sub(re.escape(tz_match.group(1)), '', time_expr, flags=re.IGNORECASE).strip()
                 except Exception as e:

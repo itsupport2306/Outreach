@@ -6,7 +6,6 @@ from typing import Dict, Optional
 from twilio.rest import Client
 from dateparser import parse
 from datetime import datetime
-from .gemini_chat import GeminiChat
 import requests
 import asyncio
 
@@ -14,17 +13,15 @@ logger = logging.getLogger(__name__)
 
 class MessagingService:
     def __init__(self):
-        """Initialize the messaging service with Twilio and Gemini."""
+        """Initialize Twilio SMS; AI candidate conversations are disabled."""
         # Initialize Twilio client
         self.twilio_account_sid = os.getenv('TWILIO_ACCOUNT_SID')
         self.twilio_auth_token = os.getenv('TWILIO_AUTH_TOKEN')
         self.twilio_phone_number = os.getenv('TWILIO_PHONE_NUMBER')
         
-        # Initialize Gemini
-        gemini_api_key = os.getenv('GOOGLE_API_KEY')
-        if not gemini_api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable is required")
-        self.gemini = GeminiChat(gemini_api_key)
+        # Spreadsheet outreach only: candidate replies are forwarded by email,
+        # never processed by Gemini or answered by an automated SMS.
+        self.gemini = None
         
         # Initialize Twilio client if credentials are available
         if all([self.twilio_account_sid, self.twilio_auth_token, self.twilio_phone_number]):
@@ -616,7 +613,11 @@ class MessagingService:
             return "I'm sorry, I encountered an error while scheduling your interview. Please try again with a specific date and time."
 
     async def process_message(self, from_number: str, message: str) -> str:
-        """Process an incoming message and generate a response."""
+        """Disabled legacy AI conversation; never generate an SMS response."""
+        logger.info("Automated AI SMS conversation is disabled; no reply generated for %s", from_number)
+        return ""
+
+        # Legacy conversation flow is unreachable in spreadsheet-only mode.
         logger.info(f"Processing message from {from_number}: {message}")
         
         # Get or initialize conversation state
@@ -1054,7 +1055,6 @@ class MessagingService:
     def clear_conversation(self, phone_number: str) -> None:
         """Clear conversation history for a phone number."""
         if phone_number in self.conversation_states:
-            self.gemini.clear_conversation(phone_number)
             del self.conversation_states[phone_number]
     
     async def _store_interview_schedule(self, phone_number: str, interview_date: str, 

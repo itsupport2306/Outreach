@@ -53,7 +53,7 @@ The app reads configuration from environment variables (supports a local `.env`)
 
 ### Required (most setups)
 
-- `GOOGLE_API_KEY` - currently required by legacy application initialization; the spreadsheet SMS reply webhook does not send candidate replies to Gemini
+- `GOOGLE_API_KEY` - not required for spreadsheet outreach; legacy AI features are inactive
 - `DATABASE_URL`
   - SQLite example: `sqlite:///./interview_scheduler.db`
   - MySQL example: `mysql+mysqldb://USER:PASSWORD@HOST:3306/DBNAME`

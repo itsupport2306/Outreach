@@ -619,7 +619,6 @@ import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from app.ceipal_client import build_ceipal_client_from_env
 
@@ -1857,16 +1856,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Initialize email processor
 _alembic_running = (os.getenv("ALEMBIC_RUNNING") or "").strip() in {"1", "true", "True"}
-if not _alembic_running:
-    google_api_key = os.getenv("GOOGLE_API_KEY")
-    if not google_api_key:
-        raise ValueError("GOOGLE_API_KEY environment variable not set")
-        
-    # Configure the Gemini client
-    genai.configure(api_key=google_api_key)
-    email_processor = EmailProcessor(google_api_key=google_api_key)
-else:
-    email_processor = None
+# The active spreadsheet-outreach workflow does not use Gemini or the legacy
+# interview-email processor. Do not make application startup depend on an AI key.
+email_processor = None
 
 # Global state for TF-IDF
 _latest_job_description = ""  # Store the most recent job description
@@ -1883,7 +1875,7 @@ _candidate_matrix = None
 _candidate_source: str = ""
 _candidate_source_file: str = ""
 _ceipal_candidates_loaded: bool = False
-_st_model: Optional[SentenceTransformer] = None
+_st_model: Optional[Any] = None
 _candidate_sem: Optional[np.ndarray] = None
 
 # Protects switching between local/CEIPAL candidates and rebuilding vector indices.
@@ -3068,6 +3060,8 @@ def _build_vector_index(candidates: List[Dict[str, Any]]):
     _candidate_matrix = _vectorizer.fit_transform(texts)
     # Build semantic embeddings (normalized) using a compact model
     try:
+        from sentence_transformers import SentenceTransformer
+
         _st_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
         emb = _st_model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
         _candidate_sem = emb.astype(np.float32)
