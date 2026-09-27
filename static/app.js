@@ -8,6 +8,11 @@ var totalPages = 1;
 var isLoading = false;
 var syncInitialized = false;
 var currentView = 'home';
+var sheetOutreachCampaignId = null;
+var sheetOutreachColumnsReady = false;
+var sheetOutreachSending = false;
+var sheetOutreachRecipientCount = 0;
+var sheetOutreachLiveEnabled = false;
 
 // UI helpers
 var toastHost;
@@ -443,6 +448,228 @@ function initializeElements() {
   elements.minExp = el('minExp');
   
   console.log('Elements initialized', elements);
+}
+
+function sheetOutreachColumnLetter(index) {
+  let value = Number(index) + 1;
+  let label = '';
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    value = Math.floor((value - 1) / 26);
+  }
+  return label;
+}
+
+function resetSheetOutreachPreview(message) {
+  sheetOutreachCampaignId = null;
+  sheetOutreachRecipientCount = 0;
+  const preview = document.getElementById('sheetOutreachPreview');
+  const sendBtn = document.getElementById('sheetSendBtn');
+  const progress = document.getElementById('sheetOutreachProgress');
+  if (preview) preview.hidden = true;
+  if (sendBtn) sendBtn.disabled = true;
+  if (progress) {
+    progress.hidden = true;
+    progress.textContent = '';
+  }
+  if (message) document.getElementById('sheetOutreachStatus').textContent = message;
+}
+
+async function inspectSheetOutreachColumns() {
+  const fileInput = document.getElementById('sheetOutreachFile');
+  const setup = document.getElementById('sheetOutreachSetup');
+  const firstNameSelect = document.getElementById('sheetFirstNameColumn');
+  const phoneSelect = document.getElementById('sheetPhoneColumn');
+  const previewBtn = document.getElementById('sheetPreviewBtn');
+  const status = document.getElementById('sheetOutreachStatus');
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+  sheetOutreachColumnsReady = false;
+  resetSheetOutreachPreview('');
+  if (setup) setup.hidden = true;
+  if (previewBtn) previewBtn.disabled = true;
+  if (!file) {
+    status.textContent = 'Choose an .xlsx workbook first.';
+    return;
+  }
+
+  status.textContent = 'Reading column headers…';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await fetch('/api/sms/outreach/columns', { method: 'POST', body: form });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Could not read columns from this workbook.');
+
+    [firstNameSelect, phoneSelect].forEach((select) => {
+      select.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choose a column';
+      select.appendChild(placeholder);
+      (data.columns || []).forEach((column) => {
+        const option = document.createElement('option');
+        option.value = String(column.index);
+        option.textContent = column.label + ' (column ' + sheetOutreachColumnLetter(column.index) + ')';
+        select.appendChild(option);
+      });
+      select.disabled = false;
+    });
+
+    if (data.suggested_first_name_column !== null && data.suggested_first_name_column !== undefined) {
+      firstNameSelect.value = String(data.suggested_first_name_column);
+    }
+    if (data.suggested_phone_column !== null && data.suggested_phone_column !== undefined) {
+      phoneSelect.value = String(data.suggested_phone_column);
+    }
+    sheetOutreachColumnsReady = true;
+    if (setup) setup.hidden = false;
+    previewBtn.disabled = !firstNameSelect.value || !phoneSelect.value;
+    status.textContent = previewBtn.disabled
+      ? 'Columns loaded. Select the first-name and phone columns to continue.'
+      : 'Columns loaded. Confirm the mapping and message, then preview recipients.';
+  } catch (error) {
+    status.textContent = error.message || 'Could not read columns from this workbook.';
+  }
+}
+
+async function previewSheetOutreach() {
+  const fileInput = document.getElementById('sheetOutreachFile');
+  const preview = document.getElementById('sheetOutreachPreview');
+  const status = document.getElementById('sheetOutreachStatus');
+  const previewBtn = document.getElementById('sheetPreviewBtn');
+  const sendBtn = document.getElementById('sheetSendBtn');
+  const firstNameSelect = document.getElementById('sheetFirstNameColumn');
+  const phoneSelect = document.getElementById('sheetPhoneColumn');
+  const messageTemplate = document.getElementById('sheetOutreachTemplate').value.trim();
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  if (!file || !sheetOutreachColumnsReady) {
+    status.textContent = 'Choose a workbook and load its columns first.';
+    return;
+  }
+  if (!firstNameSelect.value || !phoneSelect.value) {
+    status.textContent = 'Select both the first-name and phone columns.';
+    return;
+  }
+  if (!messageTemplate) {
+    status.textContent = 'Enter the SMS message to send.';
+    return;
+  }
+
+  preview.hidden = true;
+  status.textContent = 'Validating recipients and preparing the preview…';
+  previewBtn.disabled = true;
+  sendBtn.disabled = true;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('first_name_column', firstNameSelect.value);
+    form.append('phone_column', phoneSelect.value);
+    form.append('message_template', messageTemplate);
+    const response = await fetch('/api/sms/outreach/preview', { method: 'POST', body: form });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Could not read this workbook.');
+
+    sheetOutreachCampaignId = data.campaign_id;
+    sheetOutreachRecipientCount = data.recipient_count;
+    sheetOutreachLiveEnabled = data.outreach_enabled !== false;
+    document.getElementById('sheetOutreachSummary').textContent =
+      `${data.recipient_count} unique candidates ready; ${data.skipped_count} rows skipped.`;
+    document.getElementById('sheetOutreachMessage').textContent = data.message_preview;
+    const samples = document.getElementById('sheetOutreachSamples');
+    samples.innerHTML = '';
+    (data.sample_recipients || []).forEach((candidate) => {
+      const item = document.createElement('li');
+      item.innerHTML = `${escapeHtml(candidate.name)} <span class="muted">•••• ${escapeHtml(candidate.phone_last4)}</span>`;
+      samples.appendChild(item);
+    });
+    if (!(data.sample_recipients || []).length) {
+      const item = document.createElement('li');
+      item.textContent = 'No valid recipients found.';
+      samples.appendChild(item);
+    }
+    const limitInput = document.getElementById('sheetOutreachLimit');
+    limitInput.max = String(data.recipient_count);
+    limitInput.value = String(data.recipient_count);
+    sendBtn.textContent = 'Send ' + data.recipient_count + ' messages';
+    sendBtn.disabled = data.recipient_count < 1 || !sheetOutreachLiveEnabled;
+    preview.hidden = false;
+    status.textContent = sheetOutreachLiveEnabled
+      ? 'Preview ready. Nothing has been sent yet.'
+      : 'Preview ready, but sheet SMS is disabled. Set SHEET_OUTREACH_ENABLED=1 and restart the app to send.';
+  } catch (error) {
+    sheetOutreachCampaignId = null;
+    status.textContent = error.message || 'Could not read this workbook.';
+  } finally {
+    previewBtn.disabled = !sheetOutreachColumnsReady || !firstNameSelect.value || !phoneSelect.value;
+  }
+}
+
+async function sendSheetOutreach() {
+  if (!sheetOutreachCampaignId) return;
+  const sendBtn = document.getElementById('sheetSendBtn');
+  const previewBtn = document.getElementById('sheetPreviewBtn');
+  const status = document.getElementById('sheetOutreachStatus');
+  const progress = document.getElementById('sheetOutreachProgress');
+  const fileInput = document.getElementById('sheetOutreachFile');
+  const firstNameSelect = document.getElementById('sheetFirstNameColumn');
+  const phoneSelect = document.getElementById('sheetPhoneColumn');
+  const messageTemplate = document.getElementById('sheetOutreachTemplate');
+  const limitInput = document.getElementById('sheetOutreachLimit');
+  const limit = Math.max(1, parseInt(limitInput.value, 10) || 1);
+  const selectedLimit = Math.min(limit, sheetOutreachRecipientCount);
+  if (!sheetOutreachLiveEnabled) {
+    status.textContent = 'Sheet SMS is disabled. Set SHEET_OUTREACH_ENABLED=1 and restart the app to send.';
+    return;
+  }
+  if (!window.confirm('Send ' + selectedLimit + ' SMS messages now through Twilio? This cannot be undone.')) return;
+  sendBtn.disabled = true;
+  previewBtn.disabled = true;
+  fileInput.disabled = true;
+  firstNameSelect.disabled = true;
+  phoneSelect.disabled = true;
+  messageTemplate.disabled = true;
+  limitInput.disabled = true;
+  sheetOutreachSending = true;
+  status.textContent = 'Starting Twilio outreach…';
+  progress.hidden = false;
+  let sendRequestStarted = false;
+  try {
+    sendRequestStarted = true;
+    const response = await fetch('/api/sms/outreach/' + encodeURIComponent(sheetOutreachCampaignId) + '/send?limit=' + selectedLimit, { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) {
+      sendRequestStarted = response.status >= 500;
+      throw new Error(data.detail || 'Could not start this campaign.');
+    }
+    let state = data.state;
+    while (state === 'sending') {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const statusResponse = await fetch(`/api/sms/outreach/${encodeURIComponent(sheetOutreachCampaignId)}`);
+      const statusData = await statusResponse.json();
+      if (!statusResponse.ok) throw new Error(statusData.detail || 'Could not read campaign progress.');
+      state = statusData.state;
+      progress.textContent = `Processed ${statusData.processed_count} of ${statusData.recipient_count} • Twilio accepted ${statusData.sent_count} • failed ${statusData.failed_count}`;
+      if (state === 'complete') {
+        status.textContent = `Outreach complete. Twilio accepted ${statusData.sent_count}; ${statusData.failed_count} failed; ${statusData.skipped_count} rows skipped.`;
+        if (statusData.last_error && statusData.failed_count) {
+          progress.textContent += `. Latest error: ${statusData.last_error}`;
+        }
+      }
+    }
+  } catch (error) {
+    sendBtn.disabled = sendRequestStarted || !sheetOutreachLiveEnabled;
+    status.textContent = error.message || 'Outreach could not be started.';
+  } finally {
+    sheetOutreachSending = false;
+    fileInput.disabled = false;
+    firstNameSelect.disabled = false;
+    phoneSelect.disabled = false;
+    messageTemplate.disabled = false;
+    limitInput.disabled = false;
+    previewBtn.disabled = !sheetOutreachColumnsReady || !firstNameSelect.value || !phoneSelect.value;
+  }
 }
 
 function showToast(title, message, type, timeoutMs) {
@@ -2247,6 +2474,49 @@ function initEventListeners() {
   if (elements.quickSendBtn) {
     elements.quickSendBtn.addEventListener('click', quickSend);
   }
+
+  const sheetPreviewBtn = document.getElementById('sheetPreviewBtn');
+  const sheetSendBtn = document.getElementById('sheetSendBtn');
+  const sheetLimitInput = document.getElementById('sheetOutreachLimit');
+  if (sheetPreviewBtn) sheetPreviewBtn.addEventListener('click', previewSheetOutreach);
+  if (sheetSendBtn) sheetSendBtn.addEventListener('click', sendSheetOutreach);
+  if (sheetLimitInput) {
+    sheetLimitInput.addEventListener('input', () => {
+      if (!sheetOutreachCampaignId || !sheetSendBtn || sheetOutreachSending) return;
+      const max = parseInt(sheetLimitInput.max, 10) || 1;
+      const count = Math.min(Math.max(1, parseInt(sheetLimitInput.value, 10) || 1), max);
+      sheetSendBtn.textContent = 'Send ' + count + ' messages';
+    });
+  }
+  const sheetFileInput = document.getElementById('sheetOutreachFile');
+  if (sheetFileInput) {
+    sheetFileInput.addEventListener('change', inspectSheetOutreachColumns);
+  }
+  const sheetFirstNameColumn = document.getElementById('sheetFirstNameColumn');
+  const sheetPhoneColumn = document.getElementById('sheetPhoneColumn');
+  const sheetMessageTemplate = document.getElementById('sheetOutreachTemplate');
+  const invalidatePreviewOnChange = () => {
+    if (sheetOutreachSending) return;
+    resetSheetOutreachPreview('Settings changed. Preview the recipients again before sending.');
+    const previewBtn = document.getElementById('sheetPreviewBtn');
+    if (previewBtn) {
+      previewBtn.disabled = !sheetOutreachColumnsReady || !sheetFirstNameColumn.value || !sheetPhoneColumn.value;
+    }
+  };
+  if (sheetFirstNameColumn) sheetFirstNameColumn.addEventListener('change', invalidatePreviewOnChange);
+  if (sheetPhoneColumn) sheetPhoneColumn.addEventListener('change', invalidatePreviewOnChange);
+  if (sheetMessageTemplate) sheetMessageTemplate.addEventListener('input', invalidatePreviewOnChange);
+  const sheetInsertNameBtn = document.getElementById('sheetInsertNameToken');
+  if (sheetInsertNameBtn && sheetMessageTemplate) {
+    sheetInsertNameBtn.addEventListener('click', () => {
+      const token = '{{first_name}}';
+      const start = sheetMessageTemplate.selectionStart;
+      const end = sheetMessageTemplate.selectionEnd;
+      sheetMessageTemplate.setRangeText(token, start, end, 'end');
+      sheetMessageTemplate.focus();
+      invalidatePreviewOnChange();
+    });
+  }
   
   // Send message button
   if (elements.sendMessageBtn) {
@@ -2389,19 +2659,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize JD counter
   updateJdCounter();
 
-  // Default nav state
-  showView('home');
+  // Start directly in the spreadsheet SMS workflow.
+  showView('candidates');
 
   // Initialize reveal animations on initial load
   setTimeout(initRevealAnimations, 300);
 
   // Initialize enhanced animations
   initEnhancedAnimations();
-
-  // Load saved job setup into Home on first load
-  Promise.resolve(loadJobConfig()).then(() => {
-    syncRankEnabledState();
-  });
 
   // Subtle scroll-reveal animations on Home
   try {
@@ -2429,33 +2694,6 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPaginationState();
   updatePagination();
 
-  // Load original candidates data once so SMS lookup can use phone numbers
-  (async () => {
-    try {
-      const res = await fetch('/data.json', { cache: 'no-store' });
-      if (!res.ok) {
-        console.warn('Failed to load candidate dataset from /data.json');
-        return;
-      }
-
-      const payload = await res.json();
-      const items = Array.isArray(payload)
-        ? payload
-        : (Array.isArray(payload && payload.items) ? payload.items : []);
-
-      if (!Array.isArray(items) || !items.length) {
-        console.warn('Candidate dataset at /data.json is empty or has unexpected shape');
-        window.originalCandidatesData = [];
-        return;
-      }
-
-      window.originalCandidatesData = items;
-      console.log('Loaded originalCandidatesData from /data.json. Count =', window.originalCandidatesData.length);
-    } catch (e) {
-      console.warn('Error loading candidate dataset from /data.json:', e);
-    }
-  })();
-  
   console.log('Application initialized');
 });
 

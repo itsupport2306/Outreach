@@ -81,51 +81,11 @@ class EmailProcessor:
     def __init__(self, google_api_key: str, credentials_path: str = None):
         """Initialize the email processor with Google API key."""
         genai.configure(api_key=google_api_key)
-        # Use a supported model
-        try:
-            # List available models and log them
-            available_models = genai.list_models()
-            
-            # Get the list of available model names
-            available_model_names = []
-            for model in available_models:
-                model_name = model.name
-                available_model_names.append(model_name)
-            
-            logger.info(f"Found {len(available_model_names)} available models")
-            logger.debug(f"Available models: {', '.join(available_model_names)}")
-            
-            # Define the model we want to use
-            target_model = 'models/gemini-2.5-flash-lite'
-            
-            # Check if the model exists in the available models
-            if target_model in available_model_names:
-                model_name = target_model
-                logger.info(f"Using model: {model_name}")
-            else:
-                logger.warning(f"Model {target_model} not found in available models")
-                # Try to find a similar model
-                similar_models = [m for m in available_model_names if '2.5' in m and ('flash' in m or 'pro' in m)]
-                if similar_models:
-                    model_name = similar_models[0]  # Use the first similar model
-                    logger.warning(f"Using alternative model: {model_name}")
-                else:
-                    # If no similar models, try to use any available model
-                    if available_model_names:
-                        model_name = available_model_names[0]
-                        logger.warning(f"No matching model found. Using first available model: {model_name}")
-                    else:
-                        raise ValueError("No models available. Please check your API key and permissions.")
-            
-            # Initialize the model
-            logger.info(f"Initializing model: {model_name}")
-            self.model = genai.GenerativeModel(model_name)
-            logger.info(f"Successfully initialized Gemini model: {model_name}")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize Gemini model: {e}")
-            logger.error("Please check your API key and ensure it has access to the Gemini API")
-            raise
+        # Resolve the model locally. Listing remote models here makes application
+        # startup depend on a live, valid Gemini API key even for non-AI routes.
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
+        self.model = genai.GenerativeModel(model_name)
+        logger.info(f"Initialized Gemini model configuration: {model_name}")
         # Initialize Google Calendar Scheduler with explicit credentials path
         calendar_creds_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.credentials', 'token.json')
         self.scheduler = (

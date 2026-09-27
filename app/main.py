@@ -25,7 +25,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Session, load_only
 
 # FastAPI imports
-from fastapi import FastAPI, HTTPException, Body, Request, Form, Depends, status, Response, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Body, Request, Form, Depends, status, Response, Query, BackgroundTasks, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -142,6 +142,8 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 _sms_handoff_routes = {}
+_sheet_sms_campaigns: Dict[str, Dict[str, Any]] = {}
+_sheet_sms_campaigns_lock = threading.Lock()
 
 def _norm_e164(phone: str) -> str:
     """Best-effort E.164 normalization.
@@ -194,6 +196,388 @@ def _twiml_sms(body_text: str) -> Response:
     </Message>
 </Response>"""
     return Response(content=payload, media_type="application/xml", headers={"Content-Type": "application/xml"})
+
+
+def _parse_candidate_xlsx(
+    content: bytes,
+    first_name_column: Optional[int] = None,
+    phone_column: Optional[int] = None,
+    include_columns: bool = False,
+) -> tuple[Any, int]:
+    """Read the first worksheet, optionally returning its columns or mapping selected fields."""
+    import io
+    import posixpath
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    namespace = {
+        "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        "p": "http://schemas.openxmlformats.org/package/2006/relationships",
+    }
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+        members = archive.infolist()
+        if len(members) > 500 or sum(item.file_size for item in members) > 100 * 1024 * 1024:
+            raise ValueError("Workbook contents exceed the import size limit.")
+        names = {item.filename for item in members}
+        if "xl/workbook.xml" not in names or "xl/_rels/workbook.xml.rels" not in names:
+            raise ValueError("This file is not a valid Excel workbook.")
+        workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+        relationships = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        rel_targets = {item.attrib["Id"]: item.attrib["Target"] for item in relationships.findall("p:Relationship", namespace)}
+        sheet = workbook.find("m:sheets/m:sheet", namespace)
+        if sheet is None:
+            raise ValueError("The workbook does not contain a worksheet.")
+        target = rel_targets.get(sheet.attrib.get("{" + namespace["r"] + "}id"), "")
+        sheet_path = (
+            posixpath.normpath(target.lstrip("/"))
+            if target.startswith("/")
+            else posixpath.normpath(posixpath.join("xl", target))
+        )
+        if not sheet_path.startswith("xl/") or sheet_path not in names:
+            raise ValueError("The first worksheet could not be read.")
+
+        shared_strings: List[str] = []
+        if "xl/sharedStrings.xml" in names:
+            strings_xml = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+            shared_strings = [
+                "".join(text.text or "" for text in item.findall(".//m:t", namespace))
+                for item in strings_xml.findall("m:si", namespace)
+            ]
+        def cell_value(cell) -> str:
+            if cell.attrib.get("t") == "inlineStr":
+                inline = cell.find("m:is", namespace)
+                return "".join(text.text or "" for text in inline.findall(".//m:t", namespace)) if inline is not None else ""
+            value = cell.find("m:v", namespace)
+            raw = value.text if value is not None and value.text is not None else ""
+            if cell.attrib.get("t") == "s" and raw:
+                return shared_strings[int(raw)]
+            return raw
+
+        def col_index(cell_ref: str) -> int:
+            letters = re.match(r"[A-Z]+", cell_ref or "")
+            if not letters:
+                return -1
+            result = 0
+            for char in letters.group(0):
+                result = result * 26 + ord(char) - ord("A") + 1
+            return result - 1
+
+        candidates: List[Dict[str, str]] = []
+        seen_phones = set()
+        skipped = 0
+        header = None
+        header_columns: Dict[int, str] = {}
+        first_idx = phone_idx = None
+        populated_rows = 0
+        element_stack = []
+        with archive.open(sheet_path) as sheet_stream:
+            for event, row in ET.iterparse(sheet_stream, events=("start", "end")):
+                if event == "start":
+                    element_stack.append(row)
+                    continue
+                if row.tag != "{" + namespace["m"] + "}row":
+                    element_stack.pop()
+                    continue
+                values = {
+                    col_index(cell.attrib.get("r", "")): cell_value(cell).strip()
+                    for cell in row.findall("m:c", namespace)
+                }
+                if header is None:
+                    header = {}
+                    for col, value in values.items():
+                        if col < 0:
+                            continue
+                        label = value or f"Column {col + 1}"
+                        header_columns[col] = label
+                        key = re.sub(r"[^a-z0-9]", "", label.lower())
+                        if key and key not in header:
+                            header[key] = col
+                    def suggested_column(aliases: tuple[str, ...], suffixes: tuple[str, ...] = ()) -> Optional[int]:
+                        for alias in aliases:
+                            if alias in header:
+                                return header[alias]
+                        for label_key, col in header.items():
+                            if any(label_key.endswith(suffix) for suffix in suffixes):
+                                return col
+                        return None
+
+                    first_idx = suggested_column(
+                        ("firstname", "first", "givenname", "given", "candidatename", "name"),
+                        ("firstname", "givenname", "name"),
+                    )
+                    phone_idx = suggested_column(
+                        ("phone", "prefphone", "phonenumber", "mobile", "mobilephone", "cell", "cellphone", "telephone"),
+                        ("phonenumber", "mobilephone", "cellphone", "telephone"),
+                    )
+                    if include_columns:
+                        return {
+                            "columns": [
+                                {"index": col, "label": label}
+                                for col, label in sorted(header_columns.items())
+                            ],
+                            "suggested_first_name_column": first_idx,
+                            "suggested_phone_column": phone_idx,
+                        }, 0
+                    if first_name_column is not None:
+                        first_idx = first_name_column
+                    if phone_column is not None:
+                        phone_idx = phone_column
+                    if first_idx is None or first_idx not in header_columns:
+                        raise ValueError("Choose a valid First Name column or add a recognizable first-name header.")
+                    if phone_idx is None or phone_idx not in header_columns:
+                        raise ValueError("Choose a valid Phone column or add a recognizable phone header.")
+                    if first_idx == phone_idx:
+                        raise ValueError("First Name and Phone must use different columns.")
+                else:
+                    if any(values.values()):
+                        populated_rows += 1
+                        if populated_rows > 10000:
+                            raise ValueError("The worksheet exceeds the 10,000-populated-row import limit.")
+                        # Outreach copy addresses candidates by first name only.
+                        name = _extract_first_name(values.get(first_idx, ""))
+                        phone = _norm_e164(values.get(phone_idx, ""))
+                        if not name or not phone or phone in seen_phones:
+                            skipped += 1
+                        else:
+                            seen_phones.add(phone)
+                            candidates.append({"name": name, "phone": phone})
+                row.clear()
+                if len(element_stack) > 1:
+                    element_stack[-2].remove(row)
+                element_stack.pop()
+        if header is None:
+            raise ValueError("The worksheet is empty or exceeds the 10,000-populated-row import limit.")
+        if not candidates:
+            raise ValueError("No rows with both a candidate name and a valid phone number were found.")
+        return candidates, skipped
+    except zipfile.BadZipFile as exc:
+        raise ValueError("This file is not a valid .xlsx workbook.") from exc
+
+
+def _render_sheet_outreach_message(template: str, first_name: str) -> str:
+    """Render supported candidate-name tokens in a spreadsheet outreach template."""
+    return (
+        template.replace("{{first_name}}", first_name)
+        .replace("{{name}}", first_name)
+        .replace("{name}", first_name)
+    )
+
+
+def _extract_first_name(candidate_name: str) -> str:
+    """Get a given name from either a first-name field or a full candidate name."""
+    value = re.sub(r"\s+", " ", str(candidate_name or "")).strip()
+    if not value:
+        return ""
+
+    suffixes = {"jr", "sr", "ii", "iii", "iv", "v", "phd", "md", "rn"}
+    if "," in value:
+        before_comma, after_comma = value.split(",", 1)
+        after_tokens = after_comma.strip().split()
+        if after_tokens and after_tokens[0].lower().strip(".,") not in suffixes:
+            value = " ".join(after_tokens)
+        else:
+            value = before_comma.strip()
+
+    tokens = value.split()
+    if tokens and tokens[0].lower().strip(".,") in {"mr", "mrs", "ms", "miss", "dr"}:
+        tokens = tokens[1:]
+    return tokens[0].strip(".,;:") if tokens else ""
+
+
+_SHEET_OUTREACH_MESSAGE = (
+    "Hi {name}, this is Brian from Radixsol. We have Travel RN openings in KY, IN & OH "
+    "across multiple specialties with competitive weekly pay. Interested?"
+)
+
+
+@app.post("/api/sms/outreach/columns")
+async def inspect_sheet_outreach_columns(file: UploadFile = File(...)):
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Upload an .xlsx workbook.")
+    content = await file.read(15 * 1024 * 1024 + 1)
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Workbook exceeds the 15 MB upload limit.")
+    try:
+        columns, _ = _parse_candidate_xlsx(content, include_columns=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return columns
+
+
+@app.post("/api/sms/outreach/preview")
+async def preview_sheet_outreach(
+    file: UploadFile = File(...),
+    first_name_column: Optional[int] = Form(None),
+    phone_column: Optional[int] = Form(None),
+    message_template: str = Form(_SHEET_OUTREACH_MESSAGE),
+):
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Upload an .xlsx workbook.")
+    content = await file.read(15 * 1024 * 1024 + 1)
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Workbook exceeds the 15 MB upload limit.")
+    message_template = (message_template or "").strip()
+    if not message_template:
+        raise HTTPException(status_code=400, detail="Enter the SMS message to send.")
+    if len(message_template) > 1500:
+        raise HTTPException(status_code=400, detail="SMS message templates must be 1,500 characters or fewer.")
+    try:
+        candidates, skipped = _parse_candidate_xlsx(
+            content,
+            first_name_column=first_name_column,
+            phone_column=phone_column,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Do not re-contact candidates already messaged through a spreadsheet campaign.
+    db = SessionLocal()
+    try:
+        contacted_phones = {
+            row[0]
+            for row in db.query(OutreachTracker.contact)
+            .filter(OutreachTracker.candidate_id.like("sheet-email:%"))
+            .distinct()
+            .all()
+        }
+    finally:
+        db.close()
+    remaining_candidates = [candidate for candidate in candidates if candidate["phone"] not in contacted_phones]
+    skipped += len(candidates) - len(remaining_candidates)
+    candidates = remaining_candidates
+    if not candidates:
+        raise HTTPException(status_code=409, detail="All valid candidates in this workbook were already contacted.")
+
+    token = str(uuid.uuid4())
+    with _sheet_sms_campaigns_lock:
+        now = datetime.utcnow()
+        expired = [key for key, value in _sheet_sms_campaigns.items() if value.get("expires_at", now) <= now]
+        for key in expired:
+            _sheet_sms_campaigns.pop(key, None)
+        _sheet_sms_campaigns[token] = {
+            "candidates": candidates,
+            "skipped": skipped,
+            "message_template": message_template,
+            "state": "preview",
+            "created_at": now,
+            "expires_at": now + timedelta(minutes=30),
+        }
+    return {
+        "campaign_id": token,
+        "recipient_count": len(candidates),
+        "skipped_count": skipped,
+        "message_preview": _render_sheet_outreach_message(message_template, candidates[0]["name"]),
+        "sample_recipients": [
+            {"name": candidate["name"], "phone_last4": candidate["phone"][-4:]}
+            for candidate in candidates[:10]
+        ],
+        "outreach_enabled": (os.getenv("SHEET_OUTREACH_ENABLED") or "").strip().lower() in {"1", "true", "yes", "y"},
+    }
+
+
+def _run_sheet_outreach(campaign_id: str) -> None:
+    from app.messaging_service import messaging_service as sms_service
+
+    with _sheet_sms_campaigns_lock:
+        campaign = _sheet_sms_campaigns.get(campaign_id)
+        if not campaign:
+            return
+        recipients = list(campaign.get("candidates_to_send", campaign["candidates"]))
+    db = SessionLocal()
+    try:
+        for candidate in recipients:
+            message = _render_sheet_outreach_message(
+                campaign.get("message_template", _SHEET_OUTREACH_MESSAGE),
+                candidate["name"],
+            )
+            success = False
+            message_sid = None
+            error = None
+            try:
+                message_sid = sms_service.send_sms_with_sid(candidate["phone"], message)
+                success = bool(message_sid)
+                if success:
+                    now = datetime.utcnow()
+                    tracker = OutreachTracker(
+                        candidate_id=f"sheet-email:{campaign_id}:{candidate['phone']}",
+                        contact=candidate["phone"], channel="sms", first_contacted_at=now,
+                        last_outreach_at=now, followup_count=0, status="active",
+                    )
+                    db.add(tracker)
+                db.add(SmsLog(
+                    candidate_id=None, phone=candidate["phone"], direction="outgoing",
+                    message=message, status="sent" if success else "failed", provider_sid=message_sid,
+                ))
+                db.commit()
+                if not success:
+                    error = "Twilio could not send the message; check Twilio configuration and application logs."
+            except Exception as exc:
+                db.rollback()
+                error = str(exc)
+                logger.error("Sheet outreach failed for %s: %s", candidate["phone"], exc, exc_info=True)
+            with _sheet_sms_campaigns_lock:
+                current = _sheet_sms_campaigns.get(campaign_id)
+                if current:
+                    current["sent_count"] += int(success)
+                    current["failed_count"] += int(not success)
+                    if message_sid:
+                        current.setdefault("message_sids", []).append(message_sid)
+                    if error:
+                        current["last_error"] = error[:500]
+                    current["processed_count"] += 1
+            time.sleep(max(0.0, min(float(os.getenv("SHEET_OUTREACH_DELAY_SECONDS", "0.2")), 5.0)))
+    finally:
+        db.close()
+        with _sheet_sms_campaigns_lock:
+            current = _sheet_sms_campaigns.get(campaign_id)
+            if current:
+                current["state"] = "complete"
+
+
+@app.post("/api/sms/outreach/{campaign_id}/send")
+async def send_sheet_outreach(
+    campaign_id: str,
+    background_tasks: BackgroundTasks,
+    limit: int = Query(5, ge=1, le=10000),
+):
+    outreach_enabled = (os.getenv("SHEET_OUTREACH_ENABLED") or "").strip().lower() in {"1", "true", "yes", "y"}
+    if not outreach_enabled:
+        raise HTTPException(status_code=409, detail="Spreadsheet SMS outreach is disabled. Set SHEET_OUTREACH_ENABLED=1 to send SMS.")
+    with _sheet_sms_campaigns_lock:
+        campaign = _sheet_sms_campaigns.get(campaign_id)
+        if not campaign or campaign.get("expires_at", datetime.utcnow()) <= datetime.utcnow():
+            _sheet_sms_campaigns.pop(campaign_id, None)
+            raise HTTPException(status_code=404, detail="Preview expired. Upload the workbook again.")
+        if campaign["state"] != "preview":
+            raise HTTPException(status_code=409, detail="This campaign has already been started.")
+        candidates_to_send = list(campaign["candidates"][:limit])
+        campaign.update({
+            "state": "sending", "candidates_to_send": candidates_to_send,
+            "processed_count": 0, "sent_count": 0, "failed_count": 0, "message_sids": [],
+        })
+    background_tasks.add_task(_run_sheet_outreach, campaign_id)
+    return {"state": "sending", "recipient_count": len(candidates_to_send)}
+
+
+@app.get("/api/sms/outreach/{campaign_id}")
+async def get_sheet_outreach_status(campaign_id: str):
+    with _sheet_sms_campaigns_lock:
+        campaign = _sheet_sms_campaigns.get(campaign_id)
+        if not campaign or campaign.get("expires_at", datetime.utcnow()) <= datetime.utcnow():
+            _sheet_sms_campaigns.pop(campaign_id, None)
+            raise HTTPException(status_code=404, detail="Campaign status is no longer available.")
+        return {
+            "state": campaign["state"],
+            "recipient_count": len(campaign.get("candidates_to_send", campaign["candidates"])),
+            "processed_count": campaign.get("processed_count", 0),
+            "sent_count": campaign.get("sent_count", 0),
+            "failed_count": campaign.get("failed_count", 0),
+            "skipped_count": campaign["skipped"],
+            "last_error": campaign.get("last_error"),
+            "message_sids": list(campaign.get("message_sids", [])),
+        }
 
 def get_interview_service(db: Session = Depends(get_db)) -> InterviewService:
     global interview_service
@@ -258,46 +642,8 @@ from app.api.endpoints.auth import router as auth_router
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on startup."""
-    global interview_service
-    try:
-        db = SessionLocal()
-        try:
-            if interview_service is None:
-                interview_service = InterviewService(db)
-            else:
-                interview_service.db = db
-
-            svc = interview_service
-            if getattr(svc, "_tts_enabled", None) and svc._tts_enabled():
-                fixed_prompts = [
-                    "Hi, this is James Chandler calling from Radixsol. Thank you for taking the time to connect with me today—really appreciate it.",
-                    "After the beep, please share your answer. If you want me to repeat a question, just say repeat.",
-                    "How are you doing?",
-                ]
-
-                async def _one(t: str) -> None:
-                    await asyncio.to_thread(svc._ensure_tts_mp3, t)
-
-                await asyncio.gather(*[_one(t) for t in fixed_prompts])
-        finally:
-            db.close()
-    except Exception as e:
-        logger.error(f"Startup TTS prewarm failed: {e}")
-
-    # Load persisted required skills (used for the interview question template).
-    try:
-        global _latest_required_skills
-        _latest_required_skills = _load_latest_required_skills_from_file()
-    except Exception:
-        pass
-
-    # Load persisted required condition questions (used for the interview question template).
-    try:
-        global _latest_required_questions
-        _latest_required_questions = _load_latest_required_questions_from_file()
-    except Exception:
-        pass
+    """Keep startup limited to the active spreadsheet outreach workflow."""
+    logger.info("Spreadsheet outreach mode active; interview/TTS startup is disabled")
 
 @app.middleware("http")
 async def _log_timing_middleware(request: Request, call_next):
@@ -318,67 +664,28 @@ app.include_router(auth_router, prefix="/api/auth")
 # Define API routes before adding CORS middleware
 @app.post("/api/sms/webhook")
 async def sms_webhook(From: str = Form(...), Body: str = Form(...), db: Session = Depends(get_db)):
-    """Handle incoming SMS messages via Twilio webhook with Gemini AI integration."""
+    """Log candidate replies and email them to recruiters; never auto-reply to candidates."""
     try:
         logger.info(f"Received SMS from {From}: {Body}")
 
         recruiter_number = _norm_e164(os.getenv("OFFTOPIC_FORWARD_SMS_NUMBER", "+16234736809"))
 
-        # Expire old handoff routes
-        try:
-            now_utc = datetime.utcnow()
-            expired = []
-            for cand, route in (_sms_handoff_routes.get("routes") or {}).items():
-                exp = route.get("expires_at")
-                if isinstance(exp, datetime) and exp <= now_utc:
-                    expired.append(cand)
-            for cand in expired:
-                (_sms_handoff_routes.get("routes") or {}).pop(cand, None)
-        except Exception:
-            pass
-
-        # If recruiter replies, relay message to the candidate (bypass AI)
+        # Ignore internal recruiter messages in spreadsheet-only mode. The legacy
+        # relay sent SMS back to candidates and is intentionally disabled here.
         normalized_from = _norm_e164(From)
         if recruiter_number and normalized_from == recruiter_number:
-            msg_text = (Body or "").strip()
-            m = re.search(r"\+\d{10,15}", msg_text)
-            candidate_phone = _norm_e164(m.group(0)) if m else ""
-            if candidate_phone:
-                # remove the candidate number token from body
-                msg_text = re.sub(r"\+\d{10,15}", "", msg_text, count=1).strip(" -:\n\t")
-            else:
-                candidate_phone = _norm_e164((_sms_handoff_routes.get("last_candidate") or ""))
+            logger.info("Ignoring inbound recruiter SMS; recruiter-to-candidate relay is disabled")
+            return Response(
+                content='<?xml version="1.0" encoding="UTF-8"?><Response/>',
+                media_type="application/xml",
+                headers={"Content-Type": "application/xml"},
+            )
 
-            if not candidate_phone:
-                return _twiml_sms(
-                    "Please include the candidate number in your message (e.g., '+1209... your reply')."
-                )
-
-            try:
-                from app.messaging_service import messaging_service as sms_messaging_service
-                sms_messaging_service.send_sms(candidate_phone, msg_text or "")
-                logger.info(f"Handoff relay: recruiter {recruiter_number} -> candidate {candidate_phone}")
-
-                # After relaying the recruiter's answer, immediately pivot back to scheduling.
-                try:
-                    followup = (
-                        "Hope that helps. To schedule our call, could you please share your availability "
-                        "with a specific date, time, and timezone?"
-                    )
-                    sms_messaging_service.send_sms(candidate_phone, followup)
-                except Exception as fu_ex:
-                    logger.error(f"Failed to send post-handoff scheduling follow-up to {candidate_phone}: {fu_ex}", exc_info=True)
-                return _twiml_sms("Sent.")
-            except Exception as relay_ex:
-                logger.error(f"Handoff relay failed from recruiter to candidate {candidate_phone}: {relay_ex}", exc_info=True)
-                return _twiml_sms("Failed to send. Please try again.")
-
-        # Mark reply for follow-up tracker (normalize to E.164-like)
         normalized_phone = _norm_e164(From)
+        reply_candidate_name = ""
+        original_message = ""
 
-        # NOTE: We do NOT forward *all* candidate messages during handoff.
-        # Only messages detected as off-topic (see _is_offtopic below) are escalated.
-
+        # Mark this candidate as replied and stop any pending follow-ups.
         try:
             tracker = (
                 db.query(OutreachTracker)
@@ -414,7 +721,7 @@ async def sms_webhook(From: str = Form(...), Body: str = Form(...), db: Session 
         except Exception as mark_ex:
             logger.error(f"Failed to mark SMS reply for {normalized_phone}: {mark_ex}")
 
-        # Log incoming SMS in DB for dashboard
+        # Log every inbound candidate SMS and email its details to the configured recruiters.
         try:
             sms_log = SmsLog(
                 candidate_id=None,
@@ -428,188 +735,76 @@ async def sms_webhook(From: str = Form(...), Body: str = Form(...), db: Session 
             db.commit()
         except Exception as log_ex:
             logger.error(f"Failed to log incoming SMS from {normalized_phone}: {log_ex}", exc_info=True)
-        
-        # Off-topic detection: if the candidate asks something not in JD and no availability provided,
-        # forward to human and send an acknowledgement.
-        def _looks_like_availability(text: str) -> bool:
-            if not isinstance(text, str):
-                return False
-            t = text.lower()
-            # Avoid substring traps like "I am" matching "am".
-            if re.search(r"\b(am|pm)\b", t) and re.search(r"\d", t):
-                return True
-            availability_keywords = [
-                'morning','afternoon','evening','night','o\'clock',
-                'today','tomorrow','tonight','available','availability','schedule','scheduling','reschedule',
-                'monday','tuesday','wednesday','thursday','friday','saturday','sunday'
-            ]
-            return any(w in t for w in availability_keywords) or bool(re.search(r"\d", t))
-
-        def _extract_jd_keywords(desc: str) -> set:
-            if not isinstance(desc, str):
-                return set()
-            import re as _re
-            tokens = [x for x in _re.split(r"[^a-zA-Z]+", desc.lower()) if len(x) > 3]
-            common = {"about","with","that","this","from","your","have","will","been","which","their","there"}
-            return set([x for x in tokens if x not in common])
-
-        def _is_offtopic(text: str, jd: str) -> bool:
-            if not isinstance(text, str):
-                return False
-            t = text.lower()
-
-            # Do not escalate simple greetings/smalltalk. Respond politely and
-            # pivot back to scheduling in the normal Gemini + scheduler flow.
-            smalltalk_patterns = [
-                r"\bhi\b",
-                r"\bhii\b",
-                r"\bhello\b",
-                r"\bhey\b",
-                r"\bhow\s+are\s+you\b",
-                r"\bhow\s+r\s+u\b",
-                r"\bhow\s+ru\b",
-                r"\bhow\s+are\s+u\b",
-                r"\bgood\s+morning\b",
-                r"\bgood\s+afternoon\b",
-                r"\bgood\s+evening\b",
-                r"\bthank\s+you\b",
-                r"\bthanks\b",
-            ]
-            if any(re.search(p, t) for p in smalltalk_patterns):
-                return False
-
-            if _looks_like_availability(t):
-                return False
-            question_like = ('?' in t) or any(t.startswith(w) or f" {w} " in t for w in [
-                'what','how','where','when','who','which','why','pay','rate','salary','benefit','housing','stipend','overtime'
-            ])
-            if not question_like:
-                return False
-            jd_keys = _extract_jd_keywords(jd)
-            words = set([w for w in t.replace('?',' ').split() if len(w) > 3])
-            overlap = len(words & jd_keys)
-            return overlap < 2
-
-        # Load latest JobConfig description for classification
-        job_desc_for_cls = ""
         try:
-            cfg = db.query(JobConfig).order_by(JobConfig.id.desc()).first()
-            if cfg and isinstance(cfg.description, str):
-                job_desc_for_cls = cfg.description
-        except Exception as _cfg_ex:
-            logger.warning(f"Failed to load JobConfig for off-topic detection: {_cfg_ex}")
+            import html
+            from sendgrid import SendGridAPIClient
+            from sendgrid.helpers.mail import Mail, HtmlContent
 
-        if _is_offtopic(Body or "", job_desc_for_cls):
+            recipient_emails = [
+                address.strip()
+                for address in re.split(r"[,;]+", os.getenv("OFFTOPIC_FORWARD_EMAIL") or "")
+                if address.strip()
+            ]
+            sendgrid_api_key = (os.getenv("SENDGRID_API_KEY") or "").strip()
+            sender_email = (os.getenv("SENDGRID_FROM_EMAIL") or "").strip()
+
             try:
-                forward_to = (os.getenv("OFFTOPIC_FORWARD_SMS_NUMBER", "+16234736809") or "").strip()
-                notify_email = os.getenv("OFFTOPIC_FORWARD_EMAIL", "sagar@radixsol.com").strip()
-                # Start/refresh handoff mode for this candidate so replies from the recruiter
-                # can be relayed back to the candidate.
-                try:
-                    ttl_min = int((os.getenv("OFFTOPIC_HANDOFF_TTL_MINUTES") or "120").strip())
-                except Exception:
-                    ttl_min = 120
-                try:
-                    routes = _sms_handoff_routes.setdefault("routes", {})
-                    routes[normalized_phone] = {
-                        "recruiter": _norm_e164(forward_to),
-                        "started_at": datetime.utcnow(),
-                        "expires_at": datetime.utcnow() + timedelta(minutes=ttl_min),
-                    }
-                    _sms_handoff_routes["last_candidate"] = normalized_phone
-                except Exception:
-                    pass
-                # Forward inbound content to escalation number
-                # Use the SMS scheduling bot's Twilio sender (does not require DB-coupled init).
-                from app.messaging_service import messaging_service as sms_messaging_service
-                if forward_to:
-                    sms_messaging_service.send_sms(forward_to, f"[Escalation] From {normalized_phone}: {Body}")
-                    logger.info(f"Off-topic escalation SMS forwarded to {forward_to} for candidate {normalized_phone}")
-                else:
-                    logger.info(
-                        "Off-topic escalation SMS NOT forwarded (missing OFFTOPIC_FORWARD_SMS_NUMBER); "
-                        "continuing with normal SMS assistant flow."
-                    )
-                    raise RuntimeError("OFFTOPIC_FORWARD_SMS_NUMBER is empty")
-                try:
-                    sendgrid_api_key = os.getenv("SENDGRID_API_KEY", "").strip()
-                    sendgrid_from_email = os.getenv("SENDGRID_FROM_EMAIL", "").strip()
-                    if sendgrid_api_key and sendgrid_from_email and notify_email:
-                        from sendgrid import SendGridAPIClient
-                        from sendgrid.helpers.mail import Mail, HtmlContent
+                original_row = (
+                    db.query(SmsLog.message)
+                    .filter(SmsLog.phone == normalized_phone, SmsLog.direction == "outgoing")
+                    .order_by(SmsLog.id.desc())
+                    .first()
+                )
+                original_message = str(original_row[0] or "") if original_row else ""
+            except Exception as original_ex:
+                logger.warning(f"Could not load original outreach for reply from {normalized_phone}: {original_ex}")
 
-                        sg = SendGridAPIClient(sendgrid_api_key)
-                        subj = f"[Escalation][SMS] From {normalized_phone}: {(Body or '')[:60]}"
-                        body_html = (
-                            f"<p>Off-topic candidate SMS detected.</p>"
-                            f"<p><b>From:</b> {normalized_phone}</p>"
-                            f"<hr/><pre style='white-space:pre-wrap'>{(Body or '')[:4000]}</pre>"
-                        )
-                        msg = Mail(
-                            from_email=sendgrid_from_email,
-                            to_emails=notify_email,
-                            subject=subj,
-                            html_content=HtmlContent(body_html),
-                        )
-                        sg.send(msg)
-                        logger.info(f"Off-topic escalation email sent to {notify_email} for candidate {normalized_phone}")
-                    else:
-                        logger.info(
-                            "Off-topic escalation email not sent (missing SENDGRID_API_KEY/SENDGRID_FROM_EMAIL/OFFTOPIC_FORWARD_EMAIL)."
-                        )
-                except Exception as email_ex:
-                    logger.error(f"Failed to send off-topic escalation email: {email_ex}", exc_info=True)
-                logger.info(f"Forwarded off-topic SMS from {normalized_phone} to {forward_to} and noted {notify_email}")
-            except Exception as fwd_ex:
-                logger.error(f"Failed to forward off-topic SMS: {fwd_ex}")
+            name_match = re.match(
+                r"(?is)^\s*Hi\s+(.+?),\s+this is Brian from Radixsol\.", original_message
+            )
+            if name_match:
+                reply_candidate_name = name_match.group(1).strip()
 
-            # If forwarding fails (or is not configured), fall through to the normal
-            # Gemini + scheduling assistant behavior rather than blocking the candidate.
+            if recipient_emails and sendgrid_api_key and sender_email:
+                details = [
+                    ("Candidate", reply_candidate_name or "Name unavailable"),
+                    ("Phone", normalized_phone or From),
+                    ("Received (UTC)", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
+                    ("Original outreach", original_message or "Unavailable"),
+                    ("Candidate reply", (Body or "").strip() or "[empty message]"),
+                ]
+                rows_html = "".join(
+                    f"<tr><th align='left' style='padding:6px 12px 6px 0'>{html.escape(label)}</th>"
+                    f"<td style='padding:6px 0;white-space:pre-wrap'>{html.escape(value)}</td></tr>"
+                    for label, value in details
+                )
+                email_message = Mail(
+                    from_email=sender_email,
+                    to_emails=recipient_emails,
+                    subject=f"[Candidate reply] {reply_candidate_name or normalized_phone}",
+                    html_content=HtmlContent(f"<p>A candidate replied to SMS outreach.</p><table>{rows_html}</table>"),
+                )
+                SendGridAPIClient(sendgrid_api_key).send(email_message)
+                logger.info(f"Candidate reply email sent to {', '.join(recipient_emails)} for {normalized_phone}")
+            else:
+                logger.error(
+                    "Candidate reply email not sent: configure OFFTOPIC_FORWARD_EMAIL, "
+                    "SENDGRID_API_KEY, and SENDGRID_FROM_EMAIL."
+                )
+        except Exception as notify_ex:
+            logger.error(f"Failed to email recruiter about reply from {normalized_phone}: {notify_ex}", exc_info=True)
 
-        # Process the message using the messaging service
-        logger.info("Generating AI response...")
-        try:
-            # Get the messaging service instance (single instance per application)
-            from app.messaging_service import messaging_service
-            try:
-                cfg = db.query(JobConfig).order_by(JobConfig.id.desc()).first()
-                if cfg and isinstance(cfg.description, str) and cfg.description.strip():
-                    messaging_service.update_job_description(cfg.description.strip())
-            except Exception as jd_sync_err:
-                logger.error(f"Failed to sync JobConfig description into messaging_service for SMS: {jd_sync_err}", exc_info=True)
-            response_text = await messaging_service.process_message(From, Body)
-            logger.info(f"Generated response: {response_text}")
-        except Exception as e:
-            logger.error(f"Error generating response: {e}", exc_info=True)
-            response_text = "I'm sorry, I encountered an error processing your message. Please try again later."
-        
-        # Escape special XML characters in the response text
-        import html
-        escaped_response = html.escape(response_text)
-        
-        # Create TwiML response
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Message>
-        <Body>{escaped_response}</Body>
-    </Message>
-</Response>"""
-        
-        logger.info("Sending TwiML response...")
+        # Empty TwiML tells Twilio to end the webhook without sending an SMS reply.
+        logger.info(f"Candidate reply recorded for {normalized_phone}; no automated SMS response sent")
         return Response(
-            content=response,
+            content='<?xml version="1.0" encoding="UTF-8"?><Response/>',
             media_type="application/xml",
-            headers={"Content-Type": "application/xml"}
+            headers={"Content-Type": "application/xml"},
         )
         
     except Exception as e:
         logger.error(f"Error processing SMS: {str(e)}", exc_info=True)
-        error_response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Message>
-        <Body>I'm sorry, I encountered an error while processing your message. Please try again later.</Body>
-    </Message>
-</Response>"""
+        error_response = '<?xml version="1.0" encoding="UTF-8"?><Response/>'
         return Response(
             content=error_response,
             media_type="application/xml",
@@ -1124,13 +1319,14 @@ async def get_interview_results(limit: int = 100, db: Session = Depends(get_db))
 # Interview endpoints
 
 @app.post("/api/voice")
-async def voice_entrypoint(request: Request, interview_service: InterviewService = Depends(get_interview_service)):
-    """Twilio voice webhook entrypoint.
+async def voice_entrypoint(request: Request):
+    """Disable voice calls; this app now supports spreadsheet outreach only."""
+    vr = VoiceResponse()
+    vr.hangup()
+    return Response(content=str(vr), media_type="application/xml")
 
-    This is the URL used when we initiate a call from Twilio. It
-    extracts CallSid and From from Twilio's POST form data and then
-    starts the structured interview flow via InterviewService.
-    """
+    # Kept below temporarily for reference; the unconditional Hangup above
+    # ensures Twilio cannot start an interview or send a missed-call SMS.
     try:
         form = await request.form()
         call_sid = form.get("CallSid")
@@ -1501,10 +1697,14 @@ def _upsert_manual_candidate_job_context(
 async def start_interview(
     request: Request,
     call_sid: str = Form(...),
-    from_number: str = Form(...),
-    interview_service: InterviewService = Depends(get_interview_service)
+    from_number: str = Form(...)
 ):
-    """Start a new interview session with candidate-specific job context from CEIPAL."""
+    """Disabled legacy interview endpoint."""
+    vr = VoiceResponse()
+    vr.hangup()
+    return Response(content=str(vr), media_type="application/xml")
+
+    # Legacy flow retained below; unreachable while spreadsheet-only mode is active.
     try:
         # Prefer manual-flow context provided by the frontend (stored in memory by /api/sms/send).
         manual_ctx = _get_manual_phone_context(from_number)
@@ -1557,10 +1757,14 @@ async def start_interview(
 @app.post("/api/interview/question")
 async def ask_question(
     request: Request,
-    call_sid: str = Query(..., alias="call_sid"),
-    interview_service: InterviewService = Depends(get_interview_service)
+    call_sid: str = Query(..., alias="call_sid")
 ):
-    """Ask the next interview question."""
+    """Disabled legacy interview endpoint."""
+    vr = VoiceResponse()
+    vr.hangup()
+    return Response(content=str(vr), media_type="application/xml")
+
+    # Legacy flow retained below; unreachable while spreadsheet-only mode is active.
     try:
         form_data = await request.form()
         user_response = form_data.get('SpeechResult')
@@ -1576,10 +1780,14 @@ async def ask_question(
 @app.post("/api/interview/answer")
 async def handle_answer(
     request: Request,
-    call_sid: str = Query(..., alias="call_sid"),
-    interview_service: InterviewService = Depends(get_interview_service)
+    call_sid: str = Query(..., alias="call_sid")
 ):
-    """Handle the candidate's answer and move to the next question."""
+    """Disabled legacy interview endpoint."""
+    vr = VoiceResponse()
+    vr.hangup()
+    return Response(content=str(vr), media_type="application/xml")
+
+    # Legacy flow retained below; unreachable while spreadsheet-only mode is active.
     try:
         form_data = await request.form()
         user_response = form_data.get('SpeechResult')
@@ -1595,10 +1803,14 @@ async def handle_answer(
 @app.post("/api/interview/timeout")
 async def handle_timeout(
     request: Request,
-    call_sid: str = Query(..., alias="call_sid"),
-    interview_service: InterviewService = Depends(get_interview_service)
+    call_sid: str = Query(..., alias="call_sid")
 ):
-    """Handle timeout when no response is received."""
+    """Disabled legacy interview endpoint."""
+    vr = VoiceResponse()
+    vr.hangup()
+    return Response(content=str(vr), media_type="application/xml")
+
+    # Legacy flow retained below; unreachable while spreadsheet-only mode is active.
     try:
         # Treat as no-input and let InterviewService decide whether to repeat
         # the same question, move on, or end the call.
@@ -3089,51 +3301,35 @@ class JobConfigPayload(BaseModel):
     important_questions: List[str] = []
 
 
+def _require_candidate_pipeline_enabled() -> None:
+    enabled = (os.getenv("CANDIDATE_PIPELINE_ENABLED") or "").strip().lower() in {"1", "true", "yes", "y"}
+    if not enabled:
+        raise HTTPException(
+            status_code=410,
+            detail="Job fetching and candidate ranking are disabled; use spreadsheet SMS outreach.",
+        )
+
+
 # Database initialization will be handled in on_startup
 
 @app.on_event("startup")
 async def on_startup():
     global _candidates
     global _ceipal_jobs
+    global _vectorizer, _candidate_matrix, _candidate_sem
 
     # Initialize database
     _init_db()
     logger.info("Database initialized")
-    
-    # Load candidates and build vector index
-    # Prefer local JSON dataset (CANDIDATE_DATA_FILE or project-root data.json/Applicant Data.json)
-    # unless CEIPAL is explicitly enabled and no local override is configured.
-    candidate_data_file = (os.getenv("CANDIDATE_DATA_FILE") or "").strip() or None
-    candidate_data_json = os.path.join(PROJECT_ROOT, "data.json")
 
-    # Local dataset is considered available if:
-    # - CANDIDATE_DATA_FILE is set, or
-    # - project-root data.json exists, or
-    # - default Applicant Data.json exists.
-    local_data_available = False
-    try:
-        if candidate_data_file and os.path.exists(candidate_data_file):
-            local_data_available = True
-        elif os.path.exists(candidate_data_json):
-            local_data_available = True
-        elif os.path.exists(DATA_FILE):
-            local_data_available = True
-    except Exception:
-        local_data_available = True
-
-    use_ceipal = (os.getenv("USE_CEIPAL_CANDIDATES") or "").strip().lower() in {"1", "true", "yes", "y"}
-    if use_ceipal and not local_data_available:
-        _candidates = _load_candidates_from_ceipal()
-    else:
-        _candidates = _load_candidates()
-    _build_vector_index(_candidates)
-    logger.info(f"Loaded {len(_candidates)} candidates")
-
-    try:
-        if (os.getenv("CEIPAL_JOB_REPORT_URL") or "").strip() or (os.getenv("CEIPAL_JD_REPORT_URL") or "").strip():
-            _ceipal_jobs = _load_jobs_from_ceipal()
-    except Exception as e:
-        logger.error(f"Failed to preload CEIPAL jobs: {e}")
+    # This deployment is operating in spreadsheet outreach-only mode: do not
+    # load candidate datasets, build ranking indexes, or fetch jobs from CEIPAL.
+    _candidates = []
+    _ceipal_jobs = []
+    _vectorizer = None
+    _candidate_matrix = None
+    _candidate_sem = None
+    logger.info("Candidate loading, ranking, and job fetching are disabled")
     
     # Initialize the messaging service
     db = SessionLocal()
@@ -3150,17 +3346,8 @@ async def on_startup():
     if os.path.isdir(STATIC_DIR):
         app.mount("/static", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
-    # Start follow-up background loop
-    try:
-        _start_followup_loop()
-        logger.info("Follow-up worker started")
-    except Exception as fu_ex:
-        logger.error(f"Failed to start follow-up worker: {fu_ex}", exc_info=True)
-
-    try:
-        _start_ceipal_schedule_loop()
-    except Exception as ce_ex:
-        logger.error(f"Failed to start CEIPAL scheduled worker: {ce_ex}", exc_info=True)
+    # Do not start automatic follow-ups or scheduled ATS processing. Spreadsheet
+    # outreach is sent only when the user explicitly presses Send messages.
 
 
 @app.on_event("shutdown")
@@ -3908,6 +4095,7 @@ def _send_outreach_email(
 
 @app.post("/api/ceipal/process", response_model=CeipalEnqueueResponse)
 def ceipal_process(req: CeipalProcessRequest, background_tasks: BackgroundTasks):
+    _require_candidate_pipeline_enabled()
     # Enqueue: run in background task so request returns quickly
     req_dict = _pydantic_to_dict(req)
     batch_id = _enqueue_ceipal_batch_from_dict(req_dict)
@@ -3917,6 +4105,7 @@ def ceipal_process(req: CeipalProcessRequest, background_tasks: BackgroundTasks)
 
 @app.post("/api/ceipal/process/async", response_model=CeipalEnqueueResponse)
 def ceipal_process_async(req: CeipalProcessRequest, background_tasks: BackgroundTasks):
+    _require_candidate_pipeline_enabled()
     req_dict = _pydantic_to_dict(req)
     batch_id = _enqueue_ceipal_batch_from_dict(req_dict)
     background_tasks.add_task(_run_ceipal_batch, batch_id)
@@ -3980,6 +4169,11 @@ def ceipal_batch_detail(batch_id: str):
 
 def _run_ceipal_batch(batch_id: str) -> None:
     """Background runner for CEIPAL processing."""
+    try:
+        _require_candidate_pipeline_enabled()
+    except HTTPException:
+        logger.warning(f"CEIPAL batch {batch_id} skipped because the candidate pipeline is disabled")
+        return
     global _candidates
     global _ceipal_jobs
 
@@ -4676,6 +4870,7 @@ def ats_delete_final(final_id: int):
 
 @app.post("/api/ceipal/sync/jobs")
 def ceipal_sync_jobs():
+    _require_candidate_pipeline_enabled()
     global _ceipal_jobs
     try:
         _ceipal_jobs = _load_jobs_from_ceipal()
@@ -4728,6 +4923,7 @@ def _resolve_candidate_contact_fields(c: Dict[str, Any]) -> Dict[str, Optional[s
 
 @app.get("/api/ceipal/reports/candidates")
 def ceipal_candidates_report():
+    _require_candidate_pipeline_enabled()
     client = build_ceipal_client_from_env()
     report_url = (os.getenv("CEIPAL_CANDIDATE_REPORT_URL") or "").strip()
     if not report_url:
@@ -4796,6 +4992,7 @@ def _ensure_rank_uses_ceipal_candidates() -> None:
 
 @app.post("/api/ceipal/sync/candidates")
 def ceipal_sync_candidates():
+    _require_candidate_pipeline_enabled()
     global _candidates
     global _ceipal_candidates_loaded
 
@@ -5047,49 +5244,25 @@ async def get_interview_detail(result_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/voice/handle-key")
 async def handle_voice_key(request: Request):
-    """Handle key presses during a voice call."""
-    try:
-        form_data = await request.form()
-        digits = form_data.get('Digits')
-        logger.info(f"Received voice key press: {digits}")
-        
-        # Get the TwiML response for the key press
-        twiml = messaging_service.handle_voice_response(digits)
-        return Response(content=twiml, media_type="application/xml")
-    except Exception as e:
-        logger.error(f"Error handling voice key press: {str(e)}")
-        response = VoiceResponse()
-        response.say("Sorry, we encountered an error. Please try again later.")
-        return Response(content=str(response), media_type="application/xml")
+    """Disable the legacy interactive voice menu."""
+    response = VoiceResponse()
+    response.hangup()
+    return Response(content=str(response), media_type="application/xml")
 
 @app.post("/api/voice/response")
 async def voice_response(request: Request, call_sid: str = None):
-    """Handle voice responses and continue the conversation."""
-    try:
-        form_data = await request.form()
-        speech_result = form_data.get("SpeechResult")
-        call_sid = call_sid or form_data.get("CallSid")
-        
-        if not call_sid:
-            logger.error("No CallSid provided in voice response")
-            return Response(status_code=400, content="CallSid is required")
-            
-        logger.info(f"Processing voice response for call {call_sid}. Speech result: {speech_result}")
-        
-        # Get the TwiML response based on the conversation state
-        twiml = messaging_service.handle_voice_response(
-            call_sid=call_sid,
-            speech_result=speech_result
-        )
-        return Response(content=twiml, media_type="application/xml")
-        
-    except Exception as e:
-        logger.error(f"Error in voice response handler: {str(e)}")
-        return Response(status_code=500, content="Error processing voice response")
+    """Disable the legacy interactive voice conversation."""
+    response = VoiceResponse()
+    response.hangup()
+    return Response(content=str(response), media_type="application/xml")
 
 @app.post("/api/call/status")
 async def call_status(request: Request):
-    """Handle call status updates from Twilio with detailed logging."""
+    """Accept Twilio call status callbacks without triggering follow-up actions."""
+    logger.info("Received call status callback; no call workflow is active")
+    return {"ok": True}
+
+    # Legacy status logging/reschedule flow retained below but is unreachable.
     try:
         from app.messaging_service import messaging_service
 
@@ -5315,6 +5488,7 @@ def get_original_candidates() -> List[Dict[str, Any]]:
 
 @app.post("/rank", response_model=List[RankResult])
 def rank(req: RankRequest, request: Request = None, use_ceipal_candidates: bool = False):
+    _require_candidate_pipeline_enabled()
     global _latest_job_description
     global _latest_required_skills
     global _ceipal_jobs

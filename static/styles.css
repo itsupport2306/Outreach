@@ -68,6 +68,33 @@ body {
     linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
  }
 .container { max-width: 1280px; margin: 0 auto; padding: 0 28px; }
+.sheet-outreach { margin: 18px 0 24px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); }
+.sheet-outreach .panel-header { margin-bottom: 14px; }
+.sheet-outreach .panel-header h2 { margin: 0 0 4px; }
+.sheet-outreach .panel-header p { margin: 0; }
+.sheet-upload-row, .sheet-send-row { display: flex; align-items: center; gap: 12px; }
+.sheet-upload-row .input { flex: 1; min-width: 0; }
+.sheet-setup { display: grid; gap: 10px; margin-top: 16px; }
+.sheet-mapping-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.sheet-mapping-grid .label, .sheet-setup > .label { display: block; margin-bottom: 6px; }
+.sheet-template-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-template-help { margin: 0; }
+.sheet-preview-action { display: flex; justify-content: flex-end; }
+.sheet-preview { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sheet-preview > p { margin: 8px 0; }
+.sheet-message { margin: 6px 0 14px; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
+.sheet-limit-row { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+.sheet-limit-row label { font-weight: 600; }
+.sheet-limit-row .input { width: 110px; }
+.sheet-samples { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 6px 0 14px; padding-left: 20px; }
+.sheet-send-row { justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--border); }
+.sheet-send-row .muted { max-width: 720px; }
+.sheet-progress { margin-top: 10px; color: var(--muted); font-size: 0.9em; }
+@media (max-width: 680px) {
+  .sheet-upload-row, .sheet-send-row, .sheet-limit-row, .sheet-template-actions { align-items: stretch; flex-direction: column; }
+  .sheet-mapping-grid { grid-template-columns: 1fr; }
+  .sheet-send-row .btn { width: 100%; }
+}
 .app-header { background: rgba(8,8,12,0.88); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px); }
  body[data-theme="light"] .app-header { background: rgba(255,255,255,0.88); }
 .app-header .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
@@ -1456,4 +1483,19 @@ body[data-theme="light"] .results-table tbody tr:hover { background: rgba(37,99,
     transform: scale(0.98);
     opacity: 0.8;
   }
+}
+
+/* This deployment exposes only the spreadsheet-to-SMS workflow. */
+body.workflow-only header nav .nav-btn:not(#themeToggle),
+body.workflow-only main > #viewHome,
+body.workflow-only main > #dashboardPanel,
+body.workflow-only main > #analyticsPanel,
+body.workflow-only main > #atsPanel,
+body.workflow-only #resultsPanel > :not(.sheet-outreach) {
+  display: none !important;
+}
+
+body.workflow-only #resultsPanel,
+body.workflow-only #resultsPanel > .sheet-outreach {
+  display: block !important;
 }

@@ -120,6 +120,12 @@ Set:
 
 Then configure Twilio webhook(s) to point to the appropriate endpoints in `app/main.py`.
 
+## Spreadsheet SMS outreach
+
+Open the candidate workflow, choose **Outreach from spreadsheet**, and upload an `.xlsx` workbook with `First Name`, `Last Name`, and `Phone` columns. The app previews the message and recipient count before sending; rows with missing names, invalid phone numbers, or duplicate phone numbers are skipped. Sending requires `OUTREACH_ENABLED=1`.
+
+The Twilio inbound messaging webhook must point to `/api/sms/webhook`. Replies to spreadsheet campaigns are emailed to `OFFTOPIC_FORWARD_EMAIL`; the email includes candidate name and phone, the original outreach, the reply text, and a UTC timestamp. Configure `OFFTOPIC_FORWARD_EMAIL`, `SENDGRID_API_KEY`, and `SENDGRID_FROM_EMAIL`. Replies also continue through the existing candidate reply flow.
+
 ## Templates
 
 Templates are loaded from `templates.json` via the template manager.

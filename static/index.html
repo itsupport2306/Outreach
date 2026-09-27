@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Top Candidate Agent</title>
-  <link rel="stylesheet" href="styles.css?v=20260302a">
+  <title>Spreadsheet SMS Outreach</title>
+  <link rel="stylesheet" href="styles.css?v=20260927c">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="app.js?v=20260302a" defer></script>
+  <script src="app.js?v=20260927c" defer></script>
 </head>
-<body>
+<body class="workflow-only">
   <header class="app-header">
     <div class="container">
-      <h1>Talent Match</h1>
+      <h1>Spreadsheet SMS Outreach</h1>
       <nav class="header-actions" aria-label="Primary">
         <button class="btn btn-secondary nav-btn" id="navHome" type="button">Home</button>
         <button class="btn btn-secondary nav-btn" id="navInterviews" type="button">Interviews</button>
@@ -378,15 +378,66 @@
     </div>
   </div>
 
-    <section class="panel" id="resultsPanel" hidden>
+    <section class="panel" id="resultsPanel">
       <div class="panel-header">
-        <h2>Ranked Candidates</h2>
-        <div class="toolbar">
-          <button id="rankBtn" class="btn" type="button">Run Ranking</button>
-          <button id="quickSendBtn" class="btn btn-primary" title="Send availability email to selected candidates immediately">Send Email</button>
-          <button id="sendMessageBtn" class="btn btn-primary" title="Send SMS to selected candidates">Send Message</button>
-        </div>
+        <h2>Spreadsheet SMS Outreach</h2>
       </div>
+
+      <section class="panel sheet-outreach" aria-labelledby="sheetOutreachTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="sheetOutreachTitle">Outreach from spreadsheet</h2>
+            <p class="muted">Upload a workbook, map the name and phone columns, edit the SMS, and review the recipient preview before sending.</p>
+          </div>
+        </div>
+        <div class="sheet-upload-row">
+          <input id="sheetOutreachFile" class="input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Candidate spreadsheet" />
+        </div>
+        <div id="sheetOutreachSetup" class="sheet-setup" hidden>
+          <div class="sheet-mapping-grid">
+            <div>
+              <label class="label" for="sheetFirstNameColumn">First name column</label>
+              <select id="sheetFirstNameColumn" class="input" disabled>
+                <option value="">Choose a column</option>
+              </select>
+            </div>
+            <div>
+              <label class="label" for="sheetPhoneColumn">Phone number column</label>
+              <select id="sheetPhoneColumn" class="input" disabled>
+                <option value="">Choose a column</option>
+              </select>
+            </div>
+          </div>
+          <label class="label" for="sheetOutreachTemplate">SMS message</label>
+          <textarea id="sheetOutreachTemplate" class="textarea" rows="4">Hi {{first_name}}, this is Brian from Radixsol. We have Travel RN openings in KY, IN &amp; OH across multiple specialties with competitive weekly pay. Interested?</textarea>
+          <div class="sheet-template-actions">
+            <p class="muted sheet-template-help">Use <code>{{first_name}}</code> wherever the candidate’s first name should appear. Leave it out for a shared message.</p>
+            <button id="sheetInsertNameToken" class="btn btn-secondary compact" type="button">Insert first name</button>
+          </div>
+          <div class="sheet-preview-action">
+            <button id="sheetPreviewBtn" class="btn btn-secondary" type="button" disabled>Preview recipients</button>
+          </div>
+        </div>
+        <div id="sheetOutreachStatus" class="send-status mt-2" role="status" aria-live="polite"></div>
+        <div id="sheetOutreachPreview" class="sheet-preview" hidden>
+          <p id="sheetOutreachSummary" class="muted"></p>
+          <p><strong>Message preview</strong></p>
+          <blockquote id="sheetOutreachMessage" class="sheet-message"></blockquote>
+          <div class="sheet-limit-row">
+            <label for="sheetOutreachLimit">Recipients to send this run</label>
+            <input id="sheetOutreachLimit" class="input" type="number" min="1" max="10000" value="5" />
+          </div>
+          <div class="sheet-sample-wrap">
+            <strong>Sample recipients</strong>
+            <ul id="sheetOutreachSamples" class="sheet-samples"></ul>
+          </div>
+          <div class="sheet-send-row">
+            <span class="muted">Review the message and sample recipients. Clicking Send sends immediately through Twilio; invalid rows, duplicate numbers, and previously contacted candidates are skipped.</span>
+            <button id="sheetSendBtn" class="btn btn-primary" type="button" disabled>Send messages</button>
+          </div>
+        </div>
+        <div id="sheetOutreachProgress" class="sheet-progress" hidden></div>
+      </section>
 
       <div class="step-card" id="roleSetupCard">
         <div class="step-head">

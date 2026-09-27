@@ -376,6 +376,10 @@ class MessagingService:
             
     def initiate_interview_call(self, to_number: str, candidate_name: str = "Candidate") -> bool:
         """Initiate an AI-powered interview call."""
+        logger.info("Voice calling is disabled in spreadsheet outreach mode; refusing outbound call")
+        return False
+
+        # Legacy implementation retained below; unreachable while voice is disabled.
         if not self.twilio_client:
             logger.error("Twilio client not initialized. Cannot make call.")
             return False
@@ -2166,6 +2170,10 @@ Your response should be concise, relevant to the job, and focused on moving the 
 
     def _make_call_async(self, phone_number: str, call_info: dict):
         """Helper method to make the actual call at the scheduled time."""
+        logger.info("Scheduled voice calling is disabled in spreadsheet outreach mode")
+        return False
+
+        # Legacy implementation retained below; unreachable while voice is disabled.
         try:
             logger.info(f"Making scheduled call to {phone_number}")
             

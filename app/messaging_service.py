@@ -1021,25 +1021,31 @@ class MessagingService:
             logger.error(f"Error processing message: {e}")
             return "I'm sorry, I encountered an error processing your request. Please try again later."
     
-    def send_sms(self, to_number: str, message: str) -> None:
-        """Send an SMS message using Twilio."""
+    def send_sms_with_sid(self, to_number: str, message: str) -> Optional[str]:
+        """Send an SMS message and return its Twilio message SID when accepted."""
         if not self.twilio_client:
             logger.warning("Twilio client not initialized. Cannot send SMS.")
-            return
+            return None
             
         try:
             # Truncate message if too long for SMS
             if len(message) > 1500:
                 message = message[:1497] + "..."
                 
-            self.twilio_client.messages.create(
+            result = self.twilio_client.messages.create(
                 body=message,
                 from_=self.twilio_phone_number,
                 to=to_number
             )
             logger.info(f"Sent SMS to {to_number}")
+            return str(result.sid)
         except Exception as e:
             logger.error(f"Error sending SMS to {to_number}: {e}")
+            return None
+
+    def send_sms(self, to_number: str, message: str) -> bool:
+        """Send an SMS and report whether Twilio accepted it."""
+        return bool(self.send_sms_with_sid(to_number, message))
 
     def get_conversation_history(self, phone_number: str) -> list:
         """Get conversation history for a phone number."""
@@ -1299,6 +1305,10 @@ class MessagingService:
             
     async def initiate_interview_call(self, to_number: str) -> bool:
         """Initiate a voice call for the interview."""
+        logger.info("Voice calling is disabled in spreadsheet outreach mode; refusing outbound call")
+        return False
+
+        # Legacy implementation retained below; unreachable while voice is disabled.
         if not self.twilio_client:
             logger.warning("Twilio client not initialized. Cannot make call.")
             return False
